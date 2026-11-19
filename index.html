@@ -8,65 +8,59 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <style>
-    /* =========================================================================
-       3 DISTINCT HARDWARE / MAKER THEMES (No default AI blue-slate look)
-       ========================================================================= */
     :root,
     html[data-theme="workshop"] {
       --bg: #161618;
-      --surface: #212125;
-      --surface-2: #2a2a30;
-      --border: #3a3a42;
-      --border-strong: #52525c;
+      --surface: #1f1f23;
+      --surface-2: #28282d;
+      --border: #323238;
+      --border-strong: #4a4a52;
       --text: #f3f2ee;
-      --muted: #a09fa8;
+      --muted: #8e8d96;
       --accent: #ff5a1f;
       --accent-fg: #111113;
-      --accent-soft: rgba(255, 90, 31, 0.14);
+      --accent-soft: rgba(255, 90, 31, 0.12);
       --brass: #eab308;
-      --brass-soft: rgba(234, 179, 8, 0.14);
-      --ok: #22c55e;
+      --brass-soft: rgba(234, 179, 8, 0.1);
       --canvas-bg: #101012;
       --grid-main: #ff5a1f;
-      --grid-sub: #2d2d34;
+      --grid-sub: #27272d;
     }
 
     html[data-theme="daylight"] {
-      --bg: #f3efe6;
-      --surface: #fbf9f4;
-      --surface-2: #eae4d7;
-      --border: #cfc7b6;
-      --border-strong: #1e1e1c;
+      --bg: #f4f0e8;
+      --surface: #fcfaf5;
+      --surface-2: #ece6da;
+      --border: #d8d0c1;
+      --border-strong: #2b2a27;
       --text: #191917;
-      --muted: #5c5952;
+      --muted: #6b675e;
       --accent: #c84b22;
       --accent-fg: #ffffff;
-      --accent-soft: rgba(200, 75, 34, 0.12);
+      --accent-soft: rgba(200, 75, 34, 0.1);
       --brass: #9a6b00;
-      --brass-soft: rgba(154, 107, 0, 0.13);
-      --ok: #15803d;
-      --canvas-bg: #e6e0d2;
+      --brass-soft: rgba(154, 107, 0, 0.1);
+      --canvas-bg: #e7e1d4;
       --grid-main: #c84b22;
-      --grid-sub: #c6beae;
+      --grid-sub: #cbc3b4;
     }
 
     html[data-theme="blueprint"] {
       --bg: #081c36;
-      --surface: #0d284c;
-      --surface-2: #133462;
-      --border: #234f8a;
-      --border-strong: #67b7f7;
+      --surface: #0d2647;
+      --surface-2: #12315c;
+      --border: #1e4478;
+      --border-strong: #5aa9ec;
       --text: #f0f7ff;
-      --muted: #93bce8;
+      --muted: #86b0de;
       --accent: #38d9f5;
       --accent-fg: #06182e;
-      --accent-soft: rgba(56, 217, 245, 0.15);
+      --accent-soft: rgba(56, 217, 245, 0.12);
       --brass: #fbbf24;
-      --brass-soft: rgba(251, 191, 36, 0.15);
-      --ok: #34d399;
+      --brass-soft: rgba(251, 191, 36, 0.12);
       --canvas-bg: #061529;
       --grid-main: #38d9f5;
-      --grid-sub: #173c6e;
+      --grid-sub: #153663;
     }
 
     body {
@@ -78,17 +72,17 @@
 
     .vault-card {
       background-color: var(--surface);
-      border: 1.5px solid var(--border);
+      border: 1px solid var(--border);
       border-radius: 10px;
-      transition: border-color 0.15s ease, transform 0.1s ease;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
     }
     .vault-card:hover {
-      border-color: var(--accent);
+      border-color: var(--border-strong);
     }
 
     .vault-input {
       background-color: var(--bg);
-      border: 1.5px solid var(--border);
+      border: 1px solid var(--border);
       color: var(--text);
       border-radius: 7px;
     }
@@ -100,462 +94,317 @@
     .vault-btn-primary {
       background-color: var(--accent);
       color: var(--accent-fg);
-      font-weight: 700;
+      font-weight: 600;
       border-radius: 7px;
     }
     .vault-btn-primary:hover {
       filter: brightness(1.08);
     }
 
-    .vault-btn-secondary {
-      background-color: var(--surface-2);
-      color: var(--text);
+    .vault-btn-ghost {
+      background-color: transparent;
+      color: var(--muted);
       border: 1px solid var(--border);
       border-radius: 7px;
     }
-    .vault-btn-secondary:hover {
-      border-color: var(--accent);
+    .vault-btn-ghost:hover {
+      color: var(--text);
+      border-color: var(--border-strong);
     }
 
-    /* Slide-out Drawer */
     .drawer-backdrop {
-      background-color: rgba(0, 0, 0, 0.55);
+      background-color: rgba(0, 0, 0, 0.5);
       backdrop-filter: blur(2px);
-      transition: opacity 0.2s ease;
     }
     .drawer-panel {
       background-color: var(--surface);
-      border-left: 2px solid var(--border-strong);
-      transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+      border-left: 1px solid var(--border-strong);
     }
   </style>
 </head>
 <body class="min-h-screen flex flex-col">
 
-  <!-- Top Header: Custom Vault SVG Icon with Stamped "3D" + "3D Model Vault" Title (No Subtitle) -->
-  <header style="background-color: var(--surface); border-bottom: 1.5px solid var(--border);" class="sticky top-0 z-30">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-4">
+  <!-- Minimal Header -->
+  <header style="background-color: var(--surface); border-bottom: 1px solid var(--border);" class="sticky top-0 z-30">
+    <div class="max-w-6xl mx-auto px-5 py-3 flex flex-wrap items-center justify-between gap-4">
 
-      <!-- Brand Logo & Title ONLY -->
+      <!-- Vault 3D Icon + Title -->
       <div class="flex items-center gap-3">
-        <!-- Custom SVG Vault Door with "3D" Stamped Across the Front -->
-        <svg class="w-11 h-11 shrink-0" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="3D Model Vault Icon">
-          <!-- Outer Heavy Vault Frame -->
+        <svg class="w-9 h-9 shrink-0" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="3D Model Vault">
           <rect x="4" y="4" width="56" height="56" rx="10" fill="var(--surface-2)" stroke="var(--accent)" stroke-width="3.5"/>
-          <!-- Inner Machined Door Plate -->
           <rect x="10" y="10" width="44" height="44" rx="6" fill="var(--bg)" stroke="var(--border-strong)" stroke-width="2"/>
-          <!-- Corner Bolts -->
-          <circle cx="15" cy="15" r="2" fill="var(--muted)"/>
-          <circle cx="49" cy="15" r="2" fill="var(--muted)"/>
-          <circle cx="15" cy="49" r="2" fill="var(--muted)"/>
-          <circle cx="49" cy="49" r="2" fill="var(--muted)"/>
-          <!-- Right-side Heavy Vault Hinges -->
           <rect x="52" y="16" width="5" height="9" rx="1.5" fill="var(--accent)"/>
           <rect x="52" y="39" width="5" height="9" rx="1.5" fill="var(--accent)"/>
-          <!-- Vault Spoke Wheel (Subtle Behind Stamp) -->
-          <circle cx="32" cy="32" r="15" stroke="var(--border)" stroke-width="2" stroke-dasharray="4 3"/>
-          <!-- Stamped "3D" Plate Across the Front -->
           <rect x="13" y="21" width="38" height="22" rx="4" fill="var(--accent)"/>
           <text x="32" y="37" text-anchor="middle" font-family="monospace, sans-serif" font-weight="900" font-size="16" letter-spacing="1" fill="var(--accent-fg)">3D</text>
         </svg>
-        <h1 class="text-xl font-black tracking-tight">3D Model Vault</h1>
+        <h1 class="text-lg font-bold tracking-tight">3D Model Vault</h1>
       </div>
 
-      <!-- Center Navigation Tabs -->
-      <nav class="flex items-center gap-1.5 flex-wrap p-1 rounded-lg" style="background-color: var(--bg); border: 1px solid var(--border);">
-        <button onclick="switchTab('library')" id="tab-library" class="px-3.5 py-1.5 text-xs font-bold rounded-md transition flex items-center gap-1.5">
-          <span>📚 Library</span>
-          <span id="count-library" class="px-1.5 py-0.2 rounded text-[11px] font-mono">0</span>
+      <!-- Clean Text Navigation Tabs -->
+      <nav class="flex items-center gap-1 flex-wrap">
+        <button onclick="switchTab('library')" id="tab-library" class="px-3 py-1.5 text-xs font-semibold rounded-md transition">
+          Library <span id="count-library" class="ml-1 opacity-70 font-mono">0</span>
         </button>
-        <button onclick="switchTab('queue')" id="tab-queue" class="px-3.5 py-1.5 text-xs font-bold rounded-md transition flex items-center gap-1.5">
-          <span>⏳ Print Queue</span>
-          <span id="count-queue" class="px-1.5 py-0.2 rounded text-[11px] font-mono">0</span>
+        <button onclick="switchTab('queue')" id="tab-queue" class="px-3 py-1.5 text-xs font-semibold rounded-md transition">
+          Queue <span id="count-queue" class="ml-1 opacity-70 font-mono">0</span>
         </button>
-        <button onclick="switchTab('sources')" id="tab-sources" class="px-3.5 py-1.5 text-xs font-bold rounded-md transition flex items-center gap-1.5">
-          <span>🌐 Sources</span>
+        <button onclick="switchTab('sources')" id="tab-sources" class="px-3 py-1.5 text-xs font-semibold rounded-md transition">
+          Sources
         </button>
-        <button onclick="switchTab('ingest')" id="tab-ingest" class="px-3.5 py-1.5 text-xs font-bold rounded-md transition flex items-center gap-1.5">
-          <span>➕ Add / Drop Files</span>
+        <button onclick="switchTab('ingest')" id="tab-ingest" class="px-3 py-1.5 text-xs font-semibold rounded-md transition">
+          + Add
         </button>
-        <button onclick="switchTab('settings')" id="tab-settings" class="px-3.5 py-1.5 text-xs font-bold rounded-md transition flex items-center gap-1.5">
-          <span>⚙️ Setup</span>
+        <button onclick="switchTab('settings')" id="tab-settings" class="px-3 py-1.5 text-xs font-semibold rounded-md transition">
+          Setup
         </button>
       </nav>
 
-      <!-- Theme Switcher -->
-      <div class="flex items-center gap-1.5 text-xs">
-        <span style="color: var(--muted);" class="font-semibold hidden sm:inline">Theme:</span>
-        <select id="themeSelect" onchange="setTheme(this.value)" class="vault-input px-2.5 py-1.5 text-xs font-semibold cursor-pointer">
-          <option value="workshop">🔧 Workshop Industrial</option>
-          <option value="daylight">☀️ Daylight Studio</option>
-          <option value="blueprint">📐 Blueprint Drafting</option>
-        </select>
+      <!-- Compact 3-Dot Theme Switcher -->
+      <div class="flex items-center gap-1.5" title="Switch Theme">
+        <button onclick="setTheme('workshop')" aria-label="Workshop Theme" class="w-4 h-4 rounded-full border border-white/20 transition hover:scale-110" style="background: #ff5a1f;"></button>
+        <button onclick="setTheme('daylight')" aria-label="Daylight Theme" class="w-4 h-4 rounded-full border border-black/20 transition hover:scale-110" style="background: #f4f0e8;"></button>
+        <button onclick="setTheme('blueprint')" aria-label="Blueprint Theme" class="w-4 h-4 rounded-full border border-white/20 transition hover:scale-110" style="background: #38d9f5;"></button>
       </div>
 
     </div>
   </header>
 
-  <!-- Full-Width Main Content Area (No permanent right column!) -->
-  <main class="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 flex-1">
+  <!-- Main Content -->
+  <main class="max-w-6xl w-full mx-auto px-5 py-7 flex-1">
 
-    <!-- ===================================================================
-         TAB 1: LIBRARY (Full-width 3-column card grid; clicking opens drawer)
-         =================================================================== -->
-    <section id="view-library" class="space-y-4">
-      <div class="vault-card p-3.5 flex flex-wrap items-center justify-between gap-3">
+    <!-- TAB 1: LIBRARY -->
+    <section id="view-library" class="space-y-5">
+      <div class="flex flex-wrap items-center gap-2.5">
         <input
           id="searchInput"
           type="text"
           oninput="renderAll()"
-          placeholder="Search models, tags, CAD tools, filaments, or 'for next time' notes..."
-          class="vault-input flex-1 min-w-[220px] px-3.5 py-2 text-xs"
+          placeholder="Search models, filaments, or notes..."
+          class="vault-input flex-1 min-w-[200px] px-3.5 py-2 text-xs"
         />
-        <div class="flex items-center gap-2 flex-wrap">
-          <select id="filterSource" onchange="renderAll()" class="vault-input px-3 py-2 text-xs font-medium">
-            <option value="all">All Origins</option>
-            <option value="personal">🛠️ Personal CAD</option>
-            <option value="makerworld">🟢 MakerWorld</option>
-            <option value="printables">🟠 Printables</option>
-            <option value="thingiverse">🔵 Thingiverse</option>
-            <option value="other">🌐 Other Repo</option>
-          </select>
-          <select id="filterStatus" onchange="renderAll()" class="vault-input px-3 py-2 text-xs font-medium">
-            <option value="all">All Statuses</option>
-            <option value="queued">⏳ In Queue</option>
-            <option value="printing">🖨️ Printing</option>
-            <option value="printed">✅ Printed</option>
-            <option value="archived">📦 Archived</option>
-          </select>
-        </div>
+        <select id="filterSource" onchange="renderAll()" class="vault-input px-3 py-2 text-xs">
+          <option value="all">All Sources</option>
+          <option value="personal">Personal CAD</option>
+          <option value="makerworld">MakerWorld</option>
+          <option value="printables">Printables</option>
+          <option value="thingiverse">Thingiverse</option>
+        </select>
+        <select id="filterStatus" onchange="renderAll()" class="vault-input px-3 py-2 text-xs">
+          <option value="all">All Statuses</option>
+          <option value="queued">In Queue</option>
+          <option value="printing">Printing</option>
+          <option value="printed">Printed</option>
+          <option value="archived">Archived</option>
+        </select>
       </div>
 
       <div id="libraryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
     </section>
 
-    <!-- ===================================================================
-         TAB 2: PRINT QUEUE (No title card — directly shows the queue cards!)
-         =================================================================== -->
+    <!-- TAB 2: PRINT QUEUE (No title card — just the queue cards) -->
     <section id="view-queue" class="hidden space-y-3">
-      <div id="queueList" class="space-y-3"></div>
+      <div id="queueList" class="space-y-2.5"></div>
     </section>
 
-    <!-- ===================================================================
-         TAB 3: SOURCES DIRECTORY (Direct jump links to major 3D repositories)
-         =================================================================== -->
+    <!-- TAB 3: SOURCES -->
     <section id="view-sources" class="hidden space-y-5">
-      <!-- Universal Multi-Site Quick Search Bar -->
-      <div class="vault-card p-4 flex flex-wrap items-center justify-between gap-3">
-        <div class="flex-1 min-w-[240px]">
-          <input
-            id="repoSearchQuery"
-            type="text"
-            placeholder="Type a model keyword (e.g., 'gridfinity pliers', 'bambu poop chute', 'm3 knob') to search external sites..."
-            class="vault-input w-full px-3.5 py-2 text-xs"
-          />
-        </div>
-        <div class="flex items-center gap-2 flex-wrap">
-          <button onclick="jumpSearch('https://makerworld.com/en/search/models?keyword=')" class="vault-btn-primary px-3 py-2 text-xs">
-            Search MakerWorld ↗
-          </button>
-          <button onclick="jumpSearch('https://www.printables.com/search/models?q=')" class="vault-btn-secondary px-3 py-2 text-xs font-semibold">
-            Search Printables ↗
-          </button>
-          <button onclick="jumpSearch('https://www.thingiverse.com/search?q=')" class="vault-btn-secondary px-3 py-2 text-xs font-semibold">
-            Search Thingiverse ↗
-          </button>
-          <button onclick="jumpSearch('https://thangs.com/search/')" class="vault-btn-secondary px-3 py-2 text-xs font-semibold">
-            Search Thangs ↗
-          </button>
-        </div>
+      <div class="flex flex-wrap items-center gap-2.5">
+        <input
+          id="repoSearchQuery"
+          type="text"
+          placeholder="Search keyword across 3D repositories..."
+          class="vault-input flex-1 min-w-[220px] px-3.5 py-2 text-xs"
+        />
+        <button onclick="jumpSearch('https://makerworld.com/en/search/models?keyword=')" class="vault-btn-primary px-3.5 py-2 text-xs">
+          MakerWorld ↗
+        </button>
+        <button onclick="jumpSearch('https://www.printables.com/search/models?q=')" class="vault-btn-ghost px-3.5 py-2 text-xs font-medium">
+          Printables ↗
+        </button>
+        <button onclick="jumpSearch('https://www.thingiverse.com/search?q=')" class="vault-btn-ghost px-3.5 py-2 text-xs font-medium">
+          Thingiverse ↗
+        </button>
+        <button onclick="jumpSearch('https://thangs.com/search/')" class="vault-btn-ghost px-3.5 py-2 text-xs font-medium">
+          Thangs ↗
+        </button>
       </div>
 
-      <!-- Major 3D Plan Repositories Grid -->
       <div id="sourcesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
     </section>
 
-    <!-- ===================================================================
-         TAB 4: ADD / DROP FILES (Client-side STL / G-Code / 3MF auto-parser)
-         =================================================================== -->
-    <section id="view-ingest" class="hidden max-w-4xl mx-auto">
-      <div class="vault-card p-5 space-y-4">
-        <div class="flex items-center justify-between flex-wrap gap-2">
-          <h2 class="text-base font-bold">Add / Drop 3D Model Files</h2>
-          <span class="text-xs px-2.5 py-1 rounded font-mono" style="background-color: var(--accent-soft); color: var(--accent);">
-            Client-Side STL / G-Code / 3MF Auto-Parser
-          </span>
-        </div>
-
+    <!-- TAB 4: ADD / DROP FILES (Simplified default form + optional details toggle) -->
+    <section id="view-ingest" class="hidden max-w-2xl mx-auto">
+      <div class="vault-card p-6 space-y-5">
         <div
           id="dropZone"
           onclick="document.getElementById('fileInput').click()"
-          style="border: 2px dashed var(--border-strong); background-color: var(--bg);"
-          class="rounded-xl p-6 text-center cursor-pointer transition hover:opacity-95"
+          style="border: 1.5px dashed var(--border-strong); background-color: var(--bg);"
+          class="rounded-xl p-7 text-center cursor-pointer transition hover:opacity-90"
         >
           <input id="fileInput" type="file" accept=".stl,.gcode,.gco,.3mf,.zip,.step,.f3d" class="hidden" onchange="handleFileSelect(event)" />
-          <div class="text-2xl mb-1">📂</div>
-          <p class="text-xs font-bold">
-            Drag & drop <span style="color: var(--accent);">.STL</span>, <span style="color: var(--accent);">.3MF</span>, or <span style="color: var(--accent);">.GCODE</span> here, or click to browse
+          <p class="text-xs font-semibold">
+            Drop <span style="color: var(--accent);">.STL</span>, <span style="color: var(--accent);">.3MF</span>, or <span style="color: var(--accent);">.GCODE</span> here, or click to browse
           </p>
-          <p id="droppedFileStatus" style="color: var(--muted);" class="text-xs mt-1">
-            Auto-extracts X×Y×Z mm bounding box from STL • Print time & filament grams from G-code headers
+          <p id="droppedFileStatus" style="color: var(--muted);" class="text-[11px] mt-1">
+            Automatically reads STL dimensions and G-code print time & filament weight
           </p>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
           <div>
-            <label class="block text-xs font-semibold mb-1">Model Title *</label>
-            <input id="formTitle" type="text" placeholder="e.g., Gridfinity 2x3 Pliers Holder" class="vault-input w-full px-3 py-2 text-xs" />
+            <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Title</label>
+            <input id="formTitle" type="text" placeholder="Gridfinity Pliers Holder" class="vault-input w-full px-3 py-2 text-xs" />
           </div>
           <div>
-            <label class="block text-xs font-semibold mb-1">Origin / Source Type</label>
+            <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Source</label>
             <select id="formSourceType" onchange="toggleSourceFields()" class="vault-input w-full px-3 py-2 text-xs">
-              <option value="personal">🛠️ Personal Upload / Original CAD</option>
-              <option value="makerworld">🟢 MakerWorld</option>
-              <option value="printables">🟠 Printables</option>
-              <option value="thingiverse">🔵 Thingiverse</option>
-              <option value="other">🌐 Other Repository</option>
+              <option value="personal">Personal CAD</option>
+              <option value="makerworld">MakerWorld</option>
+              <option value="printables">Printables</option>
+              <option value="thingiverse">Thingiverse</option>
+              <option value="other">Other</option>
             </select>
           </div>
 
-          <!-- Personal CAD Provenance -->
-          <div id="personalSourceGroup" style="background-color: var(--bg); border: 1px solid var(--border);" class="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg">
+          <div id="personalSourceGroup" class="sm:col-span-2 grid grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs font-semibold mb-1">CAD Software</label>
-              <input id="formCadTool" type="text" placeholder="Fusion 360, FreeCAD, Blender, OpenSCAD" class="vault-input w-full px-3 py-1.5 text-xs" />
+              <label class="block text-xs font-medium mb-1" style="color: var(--muted);">CAD Tool</label>
+              <input id="formCadTool" type="text" placeholder="Fusion 360" class="vault-input w-full px-3 py-1.5 text-xs" />
             </div>
             <div>
-              <label class="block text-xs font-semibold mb-1">Revision / Version</label>
+              <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Version</label>
               <input id="formVersion" type="text" placeholder="v1.0" class="vault-input w-full px-3 py-1.5 text-xs font-mono" />
             </div>
           </div>
 
-          <!-- External Repository Provenance -->
-          <div id="externalSourceGroup" style="background-color: var(--bg); border: 1px solid var(--border);" class="hidden sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-lg">
-            <div class="sm:col-span-2">
-              <label class="block text-xs font-semibold mb-1">Source Page URL</label>
-              <input id="formUrl" type="url" oninput="autoDetectSourceFromUrl()" placeholder="https://makerworld.com/en/models/..." class="vault-input w-full px-3 py-1.5 text-xs" />
+          <div id="externalSourceGroup" class="hidden sm:col-span-2 grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Page URL</label>
+              <input id="formUrl" type="url" oninput="autoDetectSourceFromUrl()" placeholder="https://..." class="vault-input w-full px-3 py-1.5 text-xs" />
             </div>
             <div>
-              <label class="block text-xs font-semibold mb-1">Designer / Author</label>
-              <input id="formAuthor" type="text" placeholder="MakerJane" class="vault-input w-full px-3 py-1.5 text-xs" />
+              <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Author</label>
+              <input id="formAuthor" type="text" placeholder="Designer name" class="vault-input w-full px-3 py-1.5 text-xs" />
             </div>
-            <div>
-              <label class="block text-xs font-semibold mb-1">License</label>
-              <input id="formLicense" type="text" placeholder="CC BY-NC-SA 4.0" class="vault-input w-full px-3 py-1.5 text-xs" />
-            </div>
-          </div>
-
-          <div>
-            <label class="block text-xs font-semibold mb-1">Category</label>
-            <input id="formCategory" type="text" placeholder="Workshop, Gridfinity, Printer Parts" class="vault-input w-full px-3 py-2 text-xs" />
-          </div>
-          <div>
-            <label class="block text-xs font-semibold mb-1">Tags (comma-separated)</label>
-            <input id="formTags" type="text" placeholder="gridfinity, pliers, organizer" class="vault-input w-full px-3 py-2 text-xs" />
-          </div>
-
-          <!-- Specs Row -->
-          <div style="background-color: var(--bg); border: 1px solid var(--border);" class="sm:col-span-2 rounded-lg p-3 space-y-2">
-            <div class="flex items-center justify-between text-xs font-bold">
-              <span>📐 Technical & Slicer Specs</span>
-              <span id="extractedBadge" style="color: var(--muted);" class="font-normal text-[11px]">Auto-filled on file drop or editable</span>
-            </div>
-            <div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-              <div>
-                <label class="block text-[11px]" style="color: var(--muted);">Size X×Y×Z (mm)</label>
-                <input id="formDims" type="text" placeholder="84 × 126 × 42" class="vault-input w-full px-2 py-1 text-xs font-mono" />
-              </div>
-              <div>
-                <label class="block text-[11px]" style="color: var(--muted);">Est. Time</label>
-                <input id="formPrintTime" type="text" placeholder="2h 14m" class="vault-input w-full px-2 py-1 text-xs font-mono" />
-              </div>
-              <div>
-                <label class="block text-[11px]" style="color: var(--muted);">Weight (g)</label>
-                <input id="formWeight" type="number" step="0.1" placeholder="68.4" class="vault-input w-full px-2 py-1 text-xs font-mono" />
-              </div>
-              <div>
-                <label class="block text-[11px]" style="color: var(--muted);">Material</label>
-                <input id="formMaterial" type="text" placeholder="PETG / PLA" class="vault-input w-full px-2 py-1 text-xs" />
-              </div>
-              <div>
-                <label class="block text-[11px]" style="color: var(--muted);">Layer Height</label>
-                <input id="formLayer" type="text" placeholder="0.20mm" class="vault-input w-full px-2 py-1 text-xs font-mono" />
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label class="block text-xs font-semibold mb-1">Initial Queue Status</label>
-            <select id="formStatus" class="vault-input w-full px-3 py-2 text-xs">
-              <option value="queued">⏳ Add to Print Queue (Waitlist)</option>
-              <option value="archived">📦 Save to Library Archive</option>
-              <option value="printing">🖨️ Printing Now</option>
-              <option value="printed">✅ Already Printed</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold mb-1">Target Filament / Printer</label>
-            <input id="formTargetFilament" type="text" placeholder="Polymaker PETG Black on Bambu P1S" class="vault-input w-full px-3 py-2 text-xs" />
           </div>
 
           <div class="sm:col-span-2">
-            <label class="block text-xs font-bold mb-1" style="color: var(--brass);">📌 Pinned "For Next Time" Slicer Note</label>
-            <input id="formNextTime" type="text" placeholder="e.g., Use 15% gyroid infill; add +0.1mm XY hole compensation for magnets" class="vault-input w-full px-3 py-2 text-xs" />
+            <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Note for Next Time</label>
+            <input id="formNextTime" type="text" placeholder="Slicer settings, scaling, or material reminders..." class="vault-input w-full px-3 py-2 text-xs" />
           </div>
         </div>
 
-        <div class="flex justify-end pt-2">
+        <!-- Collapsible Optional Specs -->
+        <div>
+          <button type="button" onclick="document.getElementById('optionalSpecs').classList.toggle('hidden')" class="text-xs font-medium" style="color: var(--muted);">
+            ▸ More Specs & Queue Options
+          </button>
+          <div id="optionalSpecs" class="hidden grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-3 pt-3" style="border-top: 1px solid var(--border);">
+            <div>
+              <label class="block text-[11px] mb-1" style="color: var(--muted);">Size (mm)</label>
+              <input id="formDims" type="text" placeholder="84 × 126 × 42" class="vault-input w-full px-2.5 py-1.5 text-xs font-mono" />
+            </div>
+            <div>
+              <label class="block text-[11px] mb-1" style="color: var(--muted);">Est. Time</label>
+              <input id="formPrintTime" type="text" placeholder="2h 14m" class="vault-input w-full px-2.5 py-1.5 text-xs font-mono" />
+            </div>
+            <div>
+              <label class="block text-[11px] mb-1" style="color: var(--muted);">Weight (g)</label>
+              <input id="formWeight" type="number" step="0.1" placeholder="68.4" class="vault-input w-full px-2.5 py-1.5 text-xs font-mono" />
+            </div>
+            <div>
+              <label class="block text-[11px] mb-1" style="color: var(--muted);">Material</label>
+              <input id="formMaterial" type="text" placeholder="PETG" class="vault-input w-full px-2.5 py-1.5 text-xs" />
+            </div>
+            <div class="col-span-2">
+              <label class="block text-[11px] mb-1" style="color: var(--muted);">Add to</label>
+              <select id="formStatus" class="vault-input w-full px-2.5 py-1.5 text-xs">
+                <option value="queued">Print Queue</option>
+                <option value="archived">Library Archive</option>
+                <option value="printed">Already Printed</option>
+              </select>
+            </div>
+            <div class="col-span-2">
+              <label class="block text-[11px] mb-1" style="color: var(--muted);">Target Filament</label>
+              <input id="formTargetFilament" type="text" placeholder="PETG Dark Grey" class="vault-input w-full px-2.5 py-1.5 text-xs" />
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end pt-1">
           <button onclick="saveNewModel()" class="vault-btn-primary px-5 py-2 text-xs">
-            💾 Save Model to Vault
+            Save Model
           </button>
         </div>
       </div>
     </section>
 
-    <!-- ===================================================================
-         TAB 5: CLOUD & BACKUP SETUP
-         =================================================================== -->
-    <section id="view-settings" class="hidden max-w-3xl mx-auto">
-      <div class="vault-card p-5 space-y-4">
-        <h2 class="text-base font-bold">Cloud Sync & Backup Settings (Firebase + Google Apps Script)</h2>
-        <p class="text-xs" style="color: var(--muted);">
-          Connect your personal Firebase Realtime Database and Google Apps Script Drive webhook to sync your models and 3D files across computers.
-        </p>
+    <!-- TAB 5: SETUP -->
+    <section id="view-settings" class="hidden max-w-2xl mx-auto">
+      <div class="vault-card p-6 space-y-4">
+        <h2 class="text-sm font-bold">Cloud Sync Setup</h2>
         <div class="space-y-3">
           <div>
-            <label class="block text-xs font-semibold mb-1">Firebase Realtime Database REST URL</label>
+            <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Firebase Realtime Database URL</label>
             <input id="cfgFirebaseUrl" type="url" placeholder="https://your-project-default-rtdb.firebaseio.com" class="vault-input w-full px-3 py-2 text-xs font-mono" />
           </div>
           <div>
-            <label class="block text-xs font-semibold mb-1">Google Apps Script Web App Webhook URL</label>
+            <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Google Apps Script Web App URL</label>
             <input id="cfgGasUrl" type="url" placeholder="https://script.google.com/macros/s/AKfycb.../exec" class="vault-input w-full px-3 py-2 text-xs font-mono" />
           </div>
         </div>
-        <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+        <div class="flex items-center justify-between pt-2">
           <div class="flex items-center gap-2">
-            <button onclick="exportVaultJson()" class="vault-btn-secondary px-3 py-1.5 text-xs font-semibold">
-              ⬇️ Export Vault JSON
-            </button>
-            <button onclick="resetDemoData()" class="vault-btn-secondary px-3 py-1.5 text-xs font-semibold">
-              🔄 Reset Demo Models
-            </button>
+            <button onclick="exportVaultJson()" class="vault-btn-ghost px-3 py-1.5 text-xs">Export JSON</button>
+            <button onclick="resetDemoData()" class="vault-btn-ghost px-3 py-1.5 text-xs">Reset Demo</button>
           </div>
-          <button onclick="switchTab('library')" class="vault-btn-primary px-4 py-1.5 text-xs">
-            Save Settings
-          </button>
+          <button onclick="switchTab('library')" class="vault-btn-primary px-4 py-1.5 text-xs">Done</button>
         </div>
       </div>
     </section>
 
   </main>
 
-  <!-- =====================================================================
-       SLIDE-OUT DRAWER (Only opens when a card is clicked in Library or Queue;
-       automatically closes on tab switch, Esc, or backdrop click)
-       ===================================================================== -->
+  <!-- SLIDE-OUT DRAWER (Only opens on Library / Queue card click; closes on tab switch) -->
   <div id="drawerContainer" class="fixed inset-0 z-50 hidden">
-    <!-- Backdrop -->
     <div onclick="closeDrawer()" class="drawer-backdrop absolute inset-0"></div>
-
-    <!-- Right Slide-Out Drawer Panel -->
     <aside class="drawer-panel absolute top-0 right-0 bottom-0 w-full max-w-lg flex flex-col shadow-2xl overflow-hidden">
-      <!-- Drawer Header -->
-      <div style="border-bottom: 1.5px solid var(--border); background-color: var(--bg);" class="px-4 py-3 flex items-center justify-between gap-3">
-        <div class="min-w-0">
-          <div id="drawerBadges" class="flex items-center gap-1.5 flex-wrap mb-1"></div>
-          <h2 id="drawerTitle" class="text-sm font-black truncate">Model Inspector</h2>
-        </div>
-        <button onclick="closeDrawer()" class="vault-btn-secondary px-2.5 py-1 text-xs font-bold shrink-0">
-          ✕ Close
-        </button>
+      <div style="border-bottom: 1px solid var(--border);" class="px-5 py-3.5 flex items-center justify-between gap-3">
+        <h2 id="drawerTitle" class="text-sm font-bold truncate">Model Details</h2>
+        <button onclick="closeDrawer()" class="vault-btn-ghost px-2.5 py-1 text-xs shrink-0">Close</button>
       </div>
 
-      <!-- Drawer Scrollable Body -->
-      <div class="flex-1 overflow-y-auto p-4 space-y-4">
-        <!-- Three.js 3D Preview Box inside Drawer -->
+      <div class="flex-1 overflow-y-auto p-5 space-y-5">
+        <!-- Three.js 3D Preview -->
         <div class="vault-card overflow-hidden">
-          <div style="border-bottom: 1px solid var(--border); background-color: var(--bg);" class="px-3 py-2 flex items-center justify-between text-xs">
-            <span class="font-bold">🧊 Interactive 3D Preview</span>
-            <div class="flex items-center gap-1.5">
-              <button onclick="toggleWireframe()" class="vault-btn-secondary px-2 py-0.5 text-[11px] font-semibold">Wireframe</button>
-              <button onclick="toggleAutoRotate()" class="vault-btn-secondary px-2 py-0.5 text-[11px] font-semibold">Spin</button>
-            </div>
-          </div>
-          <div class="relative w-full h-56" style="background-color: var(--canvas-bg);">
+          <div class="relative w-full h-52" style="background-color: var(--canvas-bg);">
             <canvas id="threeCanvas" class="w-full h-full block cursor-grab active:cursor-grabbing"></canvas>
-            <div id="viewerDimsOverlay" style="background-color: var(--surface); border: 1px solid var(--border);" class="absolute bottom-2 left-2.5 px-2 py-0.5 rounded text-[11px] font-mono">
+            <div id="viewerDimsOverlay" style="background-color: var(--surface); border: 1px solid var(--border);" class="absolute bottom-2.5 left-2.5 px-2 py-0.5 rounded text-[11px] font-mono">
               84.0 × 126.0 × 42.5 mm
             </div>
-            <div style="color: var(--muted);" class="absolute bottom-2 right-2.5 text-[10px]">
-              Drag to orbit • Scroll to zoom
+            <div class="absolute top-2.5 right-2.5 flex gap-1.5">
+              <button onclick="toggleWireframe()" style="background-color: var(--surface); border: 1px solid var(--border);" class="px-2 py-0.5 rounded text-[11px]">Wire</button>
+              <button onclick="toggleAutoRotate()" style="background-color: var(--surface); border: 1px solid var(--border);" class="px-2 py-0.5 rounded text-[11px]">Spin</button>
             </div>
           </div>
         </div>
 
-        <!-- Dynamic Inspector Content (Provenance, Specs, Pinned Next-Time Banner, Post-Print Logs) -->
-        <div id="drawerBody" class="space-y-4"></div>
+        <div id="drawerBody" class="space-y-5"></div>
       </div>
     </aside>
   </div>
 
   <script>
-    // =========================================================================
-    // 1. MAJOR 3D REPOSITORIES DIRECTORY (For the "Sources" Tab)
-    // =========================================================================
     const EXTERNAL_REPOSITORIES = [
-      {
-        name: 'MakerWorld',
-        badge: '🟢 Bambu Lab Ecosystem',
-        url: 'https://makerworld.com/en',
-        searchUrl: 'https://makerworld.com/en/search/models?keyword=',
-        formats: '.3MF • .STL • Slicer Profiles',
-        description: 'Pre-sliced 3MF print profiles, verified print photos, and hardware BOM kits.'
-      },
-      {
-        name: 'Printables',
-        badge: '🟠 Prusa Community',
-        url: 'https://www.printables.com/model',
-        searchUrl: 'https://www.printables.com/search/models?q=',
-        formats: '.STL • .3MF • .STEP • .GCODE',
-        description: 'High-quality functional engineering models, contests, and STEP CAD files.'
-      },
-      {
-        name: 'Thingiverse',
-        badge: '🔵 Classic Archive',
-        url: 'https://www.thingiverse.com/',
-        searchUrl: 'https://www.thingiverse.com/search?q=',
-        formats: '.STL • .SCAD • .ZIP',
-        description: 'The largest historical archive of open-source 3D printable parts and OpenSCAD remixes.'
-      },
-      {
-        name: 'Thangs',
-        badge: '🟣 Geometric 3D Search Engine',
-        url: 'https://thangs.com/',
-        searchUrl: 'https://thangs.com/search/',
-        formats: '.STL • .STEP • .3MF •Multi-Site Index',
-        description: 'Indexes models across the web plus native CAD assemblies and geometry matching.'
-      },
-      {
-        name: 'Cults3D',
-        badge: '🟣 Independent Designers',
-        url: 'https://cults3d.com/en',
-        searchUrl: 'https://cults3d.com/en/search?q=',
-        formats: '.STL • .3MF • .OBJ',
-        description: 'Independent marketplace for miniatures, articulated prints, and specialty props.'
-      },
-      {
-        name: 'GrabCAD Community',
-        badge: '⚙️ Mechanical & Engineering CAD',
-        url: 'https://grabcad.com/library',
-        searchUrl: 'https://grabcad.com/library?query=',
-        formats: '.STEP • .IGES • .F3D • .SLDPRT • .STL',
-        description: 'Reference mechanical CAD parts, motors, extrusions, and fasteners for custom enclosures.'
-      }
+      { name: 'MakerWorld', url: 'https://makerworld.com/en', formats: '3MF · STL', description: 'Pre-sliced print profiles, verified makes, and hardware kits.' },
+      { name: 'Printables', url: 'https://www.printables.com/model', formats: 'STL · 3MF · STEP', description: 'Functional engineering models and community print logs.' },
+      { name: 'Thingiverse', url: 'https://www.thingiverse.com/', formats: 'STL · SCAD', description: 'Open-source 3D printable utilities and parametric remixes.' },
+      { name: 'Thangs', url: 'https://thangs.com/', formats: 'Multi-Site Index', description: 'Geometric 3D search across major repositories.' },
+      { name: 'Cults3D', url: 'https://cults3d.com/en', formats: 'STL · OBJ', description: 'Independent designer marketplace for props and miniatures.' },
+      { name: 'GrabCAD Library', url: 'https://grabcad.com/library', formats: 'STEP · F3D', description: 'Mechanical CAD parts, motors, and hardware references.' }
     ];
 
-    // =========================================================================
-    // 2. SAMPLE MODELS (Unified Metadata Schema)
-    // =========================================================================
     const STORAGE_KEY = '3d_model_vault_v2';
     const THEME_KEY = '3d_model_vault_theme';
 
@@ -564,34 +413,28 @@
         id: 'm_8f92a1',
         title: 'Gridfinity 2x3 Pliers & Flush Cutter Holder',
         sourceType: 'makerworld',
-        category: 'Workshop & Tools',
-        tags: ['gridfinity', 'pliers', 'organizer', 'workshop'],
         shapePreset: 'gridfinity',
         source: {
           isPersonalDesign: false,
           siteName: 'MakerWorld',
           url: 'https://makerworld.com/en/models/123456',
           author: 'MakerJane',
-          license: 'CC BY-NC-SA 4.0',
-          cadTool: null,
-          designVersion: null
+          license: 'CC BY-NC-SA 4.0'
         },
         files: [
-          { fileName: 'gridfinity_pliers_2x3.stl', extension: 'stl', sizeDisplay: '4.6 MB' },
-          { fileName: 'gridfinity_pliers_2x3_bambu.3mf', extension: '3mf', sizeDisplay: '2.1 MB' }
+          { fileName: 'gridfinity_pliers_2x3.stl', extension: 'stl' },
+          { fileName: 'gridfinity_pliers_2x3_bambu.3mf', extension: '3mf' }
         ],
         specs: {
           dimensionsDisplay: '84.0 × 126.0 × 42.5 mm',
           estimatedPrintTimeDisplay: '2h 14m',
-          estimatedPrintTimeMinutes: 134,
           filamentWeightGrams: 68.4,
-          recommendedMaterial: 'PETG',
-          layerHeightMm: '0.20mm'
+          recommendedMaterial: 'PETG'
         },
         workflow: {
           status: 'queued',
           queueOrder: 1,
-          targetFilament: 'Polymaker PETG Dark Grey (Bambu P1S)'
+          targetFilament: 'Polymaker PETG Dark Grey'
         },
         nextTimeSummary: 'Add +0.1mm XY hole compensation in slicer so 6x2mm magnets press-fit without glue; 15% gyroid infill is plenty strong.',
         printLogs: [
@@ -609,29 +452,22 @@
         id: 'm_3c41b9',
         title: 'Custom Enclosure Filament Pass-Through Gland',
         sourceType: 'personal',
-        category: 'Printer Upgrades',
-        tags: ['enclosure', 'ptfe', 'custom-cad', 'threaded'],
         shapePreset: 'flange',
         source: {
           isPersonalDesign: true,
           siteName: 'Personal CAD',
-          url: '',
-          author: 'Keith',
-          license: 'Personal',
           cadTool: 'Fusion 360',
           designVersion: 'v1.3'
         },
         files: [
-          { fileName: 'ptfe_passthrough_v1.3.f3d', extension: 'f3d', sizeDisplay: '1.8 MB' },
-          { fileName: 'ptfe_passthrough_v1.3.stl', extension: 'stl', sizeDisplay: '940 KB' }
+          { fileName: 'ptfe_passthrough_v1.3.f3d', extension: 'f3d' },
+          { fileName: 'ptfe_passthrough_v1.3.stl', extension: 'stl' }
         ],
         specs: {
           dimensionsDisplay: '38.0 × 38.0 × 28.0 mm',
           estimatedPrintTimeDisplay: '0h 48m',
-          estimatedPrintTimeMinutes: 48,
           filamentWeightGrams: 19.2,
-          recommendedMaterial: 'ASA / PETG',
-          layerHeightMm: '0.16mm'
+          recommendedMaterial: 'ASA'
         },
         workflow: {
           status: 'queued',
@@ -654,29 +490,23 @@
         id: 'm_7a19e4',
         title: 'Articulated Desk Cable Management Spine',
         sourceType: 'printables',
-        category: 'Desk & Office',
-        tags: ['cable-management', 'print-in-place', 'desk'],
         shapePreset: 'gear',
         source: {
           isPersonalDesign: false,
           siteName: 'Printables',
           url: 'https://www.printables.com/model/987654',
           author: 'StudioK',
-          license: 'CC BY 4.0',
-          cadTool: null,
-          designVersion: null
+          license: 'CC BY 4.0'
         },
         files: [
-          { fileName: 'cable_spine_links.stl', extension: 'stl', sizeDisplay: '3.2 MB' },
-          { fileName: 'cable_spine_0.2mm_PETG.gcode', extension: 'gcode', sizeDisplay: '8.4 MB' }
+          { fileName: 'cable_spine_links.stl', extension: 'stl' },
+          { fileName: 'cable_spine_0.2mm_PETG.gcode', extension: 'gcode' }
         ],
         specs: {
           dimensionsDisplay: '145.0 × 62.0 × 24.0 mm',
           estimatedPrintTimeDisplay: '3h 05m',
-          estimatedPrintTimeMinutes: 185,
           filamentWeightGrams: 84.0,
-          recommendedMaterial: 'PETG',
-          layerHeightMm: '0.20mm'
+          recommendedMaterial: 'PETG'
         },
         workflow: {
           status: 'printed',
@@ -706,15 +536,14 @@
     ];
 
     let models = [];
-    let activeDrawerModelId = null; // Null when drawer is closed!
+    let activeDrawerModelId = null;
     let currentTab = 'library';
     let pendingParsedFile = null;
     let pendingCustomGeometry = null;
 
     function loadState() {
       try {
-        const savedTheme = localStorage.getItem(THEME_KEY) || 'workshop';
-        setTheme(savedTheme);
+        setTheme(localStorage.getItem(THEME_KEY) || 'workshop');
         const raw = localStorage.getItem(STORAGE_KEY);
         models = raw ? JSON.parse(raw) : JSON.parse(JSON.stringify(DEFAULT_MODELS));
       } catch (e) {
@@ -723,43 +552,28 @@
     }
 
     function saveModels() {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(models));
-      } catch (e) {}
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(models)); } catch (e) {}
       renderAll();
       if (activeDrawerModelId) renderDrawerContent(activeDrawerModelId);
     }
 
     function setTheme(themeName) {
       document.documentElement.setAttribute('data-theme', themeName);
-      const sel = document.getElementById('themeSelect');
-      if (sel) sel.value = themeName;
       try { localStorage.setItem(THEME_KEY, themeName); } catch (e) {}
       updateThreeThemeColors();
     }
 
-    // =========================================================================
-    // 3. SLIDE-OUT DRAWER CONTROLLER (Closes on Tab Switch / Esc / Backdrop)
-    // =========================================================================
     function openModelDrawer(id) {
-      // Only allow opening from Library or Print Queue tabs
       if (currentTab !== 'library' && currentTab !== 'queue') return;
       activeDrawerModelId = id;
-      const drawer = document.getElementById('drawerContainer');
-      drawer.classList.remove('hidden');
-
+      document.getElementById('drawerContainer').classList.remove('hidden');
       renderDrawerContent(id);
-
-      // Resize & render Three.js inside drawer once visible
       requestAnimationFrame(() => {
         resizeThreeCanvas();
         const m = models.find((x) => x.id === id);
         if (m) {
-          if (m.customGeometry) {
-            loadCustomStlGeometry(m.customGeometry, m.title);
-          } else {
-            buildPresetMesh(m.shapePreset || 'gridfinity');
-          }
+          if (m.customGeometry) loadCustomStlGeometry(m.customGeometry);
+          else buildPresetMesh(m.shapePreset || 'gridfinity');
           document.getElementById('viewerDimsOverlay').textContent = m.specs?.dimensionsDisplay || '—';
         }
       });
@@ -775,19 +589,16 @@
     });
 
     // =========================================================================
-    // 4. THREE.JS 3D VIEWPORT (Lives inside the Slide-Out Drawer)
+    // THREE.JS VIEWER
     // =========================================================================
     let scene, camera, renderer, currentMesh, gridHelper;
-    let wireframeMode = false;
-    let autoRotate = true;
-    let isDragging = false;
+    let wireframeMode = false, autoRotate = true, isDragging = false;
     let prevMouse = { x: 0, y: 0 };
     let spherical = { theta: 0.65, phi: 1.05, radius: 165 };
 
     function getThemeHex(varName, fallbackHex) {
       const val = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
-      if (val.startsWith('#')) return parseInt(val.slice(1), 16);
-      return fallbackHex;
+      return val.startsWith('#') ? parseInt(val.slice(1), 16) : fallbackHex;
     }
 
     function initThreeViewer() {
@@ -797,26 +608,20 @@
       renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-      const hemi = new THREE.HemisphereLight(0xffffff, 0x222222, 0.95);
-      scene.add(hemi);
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x222222, 0.95));
       const dir1 = new THREE.DirectionalLight(0xffffff, 0.85);
       dir1.position.set(120, 180, 130);
       scene.add(dir1);
 
       updateThreeThemeColors();
 
-      canvas.addEventListener('mousedown', (e) => {
-        isDragging = true;
-        prevMouse = { x: e.clientX, y: e.clientY };
-      });
+      canvas.addEventListener('mousedown', (e) => { isDragging = true; prevMouse = { x: e.clientX, y: e.clientY }; });
       window.addEventListener('mouseup', () => { isDragging = false; });
       window.addEventListener('mousemove', (e) => {
         if (!isDragging) return;
-        const dx = e.clientX - prevMouse.x;
-        const dy = e.clientY - prevMouse.y;
+        spherical.theta -= (e.clientX - prevMouse.x) * 0.01;
+        spherical.phi = Math.max(0.15, Math.min(Math.PI - 0.15, spherical.phi - (e.clientY - prevMouse.y) * 0.01));
         prevMouse = { x: e.clientX, y: e.clientY };
-        spherical.theta -= dx * 0.01;
-        spherical.phi = Math.max(0.15, Math.min(Math.PI - 0.15, spherical.phi - dy * 0.01));
         updateCameraPosition();
       });
       canvas.addEventListener('wheel', (e) => {
@@ -834,12 +639,7 @@
       if (!scene) return;
       scene.background = new THREE.Color(getThemeHex('--canvas-bg', 0x101012));
       if (gridHelper) scene.remove(gridHelper);
-      gridHelper = new THREE.GridHelper(
-        200,
-        20,
-        getThemeHex('--grid-main', 0xff5a1f),
-        getThemeHex('--grid-sub', 0x2d2d34)
-      );
+      gridHelper = new THREE.GridHelper(200, 20, getThemeHex('--grid-main', 0xff5a1f), getThemeHex('--grid-sub', 0x27272d));
       gridHelper.position.y = -25;
       scene.add(gridHelper);
     }
@@ -863,21 +663,13 @@
     function animateThree() {
       requestAnimationFrame(animateThree);
       if (!activeDrawerModelId) return;
-      if (autoRotate && !isDragging && currentMesh) {
-        currentMesh.rotation.y += 0.005;
-      }
-      if (renderer && scene && camera) {
-        renderer.render(scene, camera);
-      }
+      if (autoRotate && !isDragging && currentMesh) currentMesh.rotation.y += 0.005;
+      if (renderer && scene && camera) renderer.render(scene, camera);
     }
 
     function toggleWireframe() {
       wireframeMode = !wireframeMode;
-      if (currentMesh) {
-        currentMesh.traverse((c) => {
-          if (c.isMesh && c.material) c.material.wireframe = wireframeMode;
-        });
-      }
+      if (currentMesh) currentMesh.traverse((c) => { if (c.isMesh && c.material) c.material.wireframe = wireframeMode; });
     }
 
     function toggleAutoRotate() { autoRotate = !autoRotate; }
@@ -886,27 +678,16 @@
       if (!scene) return;
       if (currentMesh) scene.remove(currentMesh);
       const group = new THREE.Group();
-      const accentHex = getThemeHex('--accent', 0xff5a1f);
-      const mat = new THREE.MeshStandardMaterial({
-        color: accentHex,
-        roughness: 0.35,
-        metalness: 0.2,
-        wireframe: wireframeMode
-      });
-
+      const mat = new THREE.MeshStandardMaterial({ color: getThemeHex('--accent', 0xff5a1f), roughness: 0.35, metalness: 0.2, wireframe: wireframeMode });
       if (preset === 'flange') {
-        const base = new THREE.Mesh(new THREE.CylinderGeometry(32, 32, 8, 32), mat);
-        base.position.y = -15;
-        const shaft = new THREE.Mesh(new THREE.CylinderGeometry(16, 16, 36, 32), mat);
-        shaft.position.y = 4;
+        const base = new THREE.Mesh(new THREE.CylinderGeometry(32, 32, 8, 32), mat); base.position.y = -15;
+        const shaft = new THREE.Mesh(new THREE.CylinderGeometry(16, 16, 36, 32), mat); shaft.position.y = 4;
         const hex = new THREE.Mesh(new THREE.CylinderGeometry(24, 24, 10, 6), mat);
         group.add(base, shaft, hex);
       } else if (preset === 'gear') {
-        const knot = new THREE.Mesh(new THREE.TorusKnotGeometry(24, 7.5, 100, 16), mat);
-        group.add(knot);
+        group.add(new THREE.Mesh(new THREE.TorusKnotGeometry(24, 7.5, 100, 16), mat));
       } else {
-        const body = new THREE.Mesh(new THREE.BoxGeometry(64, 36, 92), mat);
-        body.position.y = -4;
+        const body = new THREE.Mesh(new THREE.BoxGeometry(64, 36, 92), mat); body.position.y = -4;
         group.add(body);
       }
       currentMesh = group;
@@ -916,35 +697,30 @@
     function parseStlBufferToGeometry(buffer) {
       const view = new DataView(buffer);
       if (buffer.byteLength > 84) {
-        const numTriangles = view.getUint32(80, true);
-        if (84 + numTriangles * 50 === buffer.byteLength && numTriangles > 0) {
-          const positions = new Float32Array(numTriangles * 9);
-          let offset = 84;
-          for (let i = 0; i < numTriangles; i++) {
-            offset += 12;
-            for (let v = 0; v < 9; v++) {
-              positions[i * 9 + v] = view.getFloat32(offset, true);
-              offset += 4;
-            }
-            offset += 2;
+        const n = view.getUint32(80, true);
+        if (84 + n * 50 === buffer.byteLength && n > 0) {
+          const pos = new Float32Array(n * 9);
+          let off = 84;
+          for (let i = 0; i < n; i++) {
+            off += 12;
+            for (let v = 0; v < 9; v++) { pos[i * 9 + v] = view.getFloat32(off, true); off += 4; }
+            off += 2;
           }
-          const geom = new THREE.BufferGeometry();
-          geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-          geom.computeVertexNormals();
-          return geom;
+          const g = new THREE.BufferGeometry();
+          g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+          g.computeVertexNormals();
+          return g;
         }
       }
       const text = new TextDecoder().decode(buffer);
-      const vertexRegex = /vertex\s+([\d.+\-eE]+)\s+([\d.+\-eE]+)\s+([\d.+\-eE]+)/g;
+      const re = /vertex\s+([\d.+\-eE]+)\s+([\d.+\-eE]+)\s+([\d.+\-eE]+)/g;
       const verts = [];
-      let match;
-      while ((match = vertexRegex.exec(text)) !== null) {
-        verts.push(parseFloat(match[1]), parseFloat(match[2]), parseFloat(match[3]));
-      }
-      const geom = new THREE.BufferGeometry();
-      geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
-      geom.computeVertexNormals();
-      return geom;
+      let m;
+      while ((m = re.exec(text)) !== null) verts.push(parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3]));
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+      g.computeVertexNormals();
+      return g;
     }
 
     function loadCustomStlGeometry(geometry) {
@@ -954,14 +730,8 @@
       const size = new THREE.Vector3();
       geometry.boundingBox.getSize(size);
       geometry.center();
-      const maxDim = Math.max(size.x, size.y, size.z) || 1;
-      const scale = 75 / maxDim;
-      const mat = new THREE.MeshStandardMaterial({
-        color: getThemeHex('--accent', 0xff5a1f),
-        roughness: 0.35,
-        metalness: 0.15,
-        wireframe: wireframeMode
-      });
+      const scale = 75 / (Math.max(size.x, size.y, size.z) || 1);
+      const mat = new THREE.MeshStandardMaterial({ color: getThemeHex('--accent', 0xff5a1f), roughness: 0.35, metalness: 0.15, wireframe: wireframeMode });
       const mesh = new THREE.Mesh(geometry, mat);
       mesh.scale.set(scale, scale, scale);
       mesh.rotation.x = -Math.PI / 2;
@@ -970,13 +740,11 @@
     }
 
     // =========================================================================
-    // 5. TAB NAVIGATION & RENDERING (Switching tabs always closes the drawer!)
+    // NAVIGATION & CLEAN RENDERING
     // =========================================================================
     function switchTab(tab) {
-      // Rule: The selected model slide-out drawer must NOT carry between tabs
       closeDrawer();
       currentTab = tab;
-
       ['library', 'queue', 'sources', 'ingest', 'settings'].forEach((t) => {
         document.getElementById(`view-${t}`).classList.toggle('hidden', t !== tab);
         const btn = document.getElementById(`tab-${t}`);
@@ -985,37 +753,14 @@
           btn.style.color = 'var(--accent-fg)';
         } else {
           btn.style.backgroundColor = 'transparent';
-          btn.style.color = 'var(--text)';
+          btn.style.color = 'var(--muted)';
         }
       });
       renderAll();
     }
 
-    function badgeHtml(text, isAccent = false) {
-      const bg = isAccent ? 'var(--accent-soft)' : 'var(--surface-2)';
-      const col = isAccent ? 'var(--accent)' : 'var(--text)';
-      return `<span style="background-color:${bg}; color:${col}; border: 1px solid var(--border);" class="text-[11px] font-bold px-2 py-0.5 rounded">${text}</span>`;
-    }
-
-    function originLabel(m) {
-      const map = {
-        personal: '🛠️ Personal CAD',
-        makerworld: '🟢 MakerWorld',
-        printables: '🟠 Printables',
-        thingiverse: '🔵 Thingiverse',
-        other: '🌐 ' + (m.source?.siteName || 'External')
-      };
-      return map[m.sourceType] || map.other;
-    }
-
-    function statusLabel(st) {
-      const map = {
-        queued: '⏳ Queued',
-        printing: '🖨️ Printing',
-        printed: '✅ Printed',
-        archived: '📦 Archived'
-      };
-      return map[st] || '📦 Archived';
+    function originText(m) {
+      return m.source?.isPersonalDesign ? 'Personal CAD' : (m.source?.siteName || m.sourceType);
     }
 
     function renderAll() {
@@ -1040,68 +785,45 @@
         if (srcFilter !== 'all' && m.sourceType !== srcFilter) return false;
         if (stFilter !== 'all' && m.workflow.status !== stFilter) return false;
         if (!q) return true;
-        const hay = [
-          m.title,
-          m.category,
-          ...(m.tags || []),
-          m.source?.author,
-          m.source?.cadTool,
-          m.nextTimeSummary,
-          m.workflow?.targetFilament
-        ].join(' ').toLowerCase();
-        return hay.includes(q);
+        return [m.title, m.source?.author, m.source?.cadTool, m.nextTimeSummary, m.workflow?.targetFilament].join(' ').toLowerCase().includes(q);
       });
 
       const grid = document.getElementById('libraryGrid');
       if (filtered.length === 0) {
-        grid.innerHTML = `<div class="col-span-full vault-card p-8 text-center text-xs" style="color: var(--muted);">No models match your filter.</div>`;
+        grid.innerHTML = `<div class="col-span-full vault-card p-10 text-center text-xs" style="color: var(--muted);">No models match your filter.</div>`;
         return;
       }
 
       grid.innerHTML = filtered.map((m) => {
         const isQueued = m.workflow.status === 'queued';
         return `
-          <div onclick="openModelDrawer('${m.id}')" class="vault-card p-4 cursor-pointer flex flex-col justify-between gap-3">
+          <div onclick="openModelDrawer('${m.id}')" class="vault-card p-5 cursor-pointer flex flex-col justify-between gap-4">
             <div class="space-y-2">
-              <div class="flex items-center justify-between gap-2 flex-wrap">
-                ${badgeHtml(originLabel(m))}
-                ${badgeHtml(statusLabel(m.workflow.status), isQueued)}
+              <div class="flex items-center justify-between text-[11px] font-medium" style="color: var(--muted);">
+                <span>${originText(m)}</span>
+                <span class="uppercase tracking-wider" style="color: ${isQueued ? 'var(--accent)' : 'var(--muted)'};">${m.workflow.status}</span>
               </div>
 
-              <h3 class="text-sm font-black leading-snug">${m.title}</h3>
+              <h3 class="text-sm font-semibold leading-snug">${m.title}</h3>
 
-              <div class="text-xs" style="color: var(--muted);">
-                ${
-                  m.source?.isPersonalDesign
-                    ? `CAD: <strong style="color: var(--text);">${m.source.cadTool || 'Custom'}</strong> (${m.source.designVersion || 'v1.0'})`
-                    : `By <strong style="color: var(--text);">${m.source?.author || 'Unknown'}</strong> • ${m.source?.license || 'CC'}`
-                }
-              </div>
-
-              <div class="flex flex-wrap items-center gap-1.5 text-[11px] font-mono pt-1">
-                <span style="background-color: var(--bg); border: 1px solid var(--border);" class="px-2 py-0.5 rounded">⏱️ ${m.specs?.estimatedPrintTimeDisplay || '—'}</span>
-                <span style="background-color: var(--bg); border: 1px solid var(--border);" class="px-2 py-0.5 rounded">⚖️ ${m.specs?.filamentWeightGrams || '—'}g</span>
-                <span style="background-color: var(--bg); border: 1px solid var(--border);" class="px-2 py-0.5 rounded">🧵 ${m.specs?.recommendedMaterial || 'PLA'}</span>
+              <div class="text-xs font-mono" style="color: var(--muted);">
+                ${m.specs?.estimatedPrintTimeDisplay || '—'} · ${m.specs?.filamentWeightGrams || '—'}g · ${m.specs?.recommendedMaterial || 'PLA'}
               </div>
 
               ${
                 m.nextTimeSummary
-                  ? `<div style="background-color: var(--brass-soft); border: 1px solid var(--brass);" class="mt-2 p-2 rounded text-xs">
-                      <strong>📌 Next Time:</strong> ${m.nextTimeSummary}
-                    </div>`
+                  ? `<p class="text-xs truncate pt-1" style="color: var(--brass);">📌 ${m.nextTimeSummary}</p>`
                   : ''
               }
             </div>
 
-            <div style="border-top: 1px solid var(--border);" class="pt-2.5 flex items-center justify-between gap-2">
-              <div class="flex flex-wrap gap-1">
-                ${(m.files || []).map((f) => `<span style="background-color: var(--bg); border: 1px solid var(--border);" class="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded">.${f.extension}</span>`).join('')}
-              </div>
+            <div class="flex items-center justify-between pt-3" style="border-top: 1px solid var(--border);">
+              <span class="text-[11px] font-mono uppercase" style="color: var(--muted);">${(m.files || []).map((f) => f.extension).join(' · ')}</span>
               <button
                 onclick="toggleQueueStatus('${m.id}', event)"
-                class="${isQueued ? 'vault-btn-primary' : 'vault-btn-secondary'} px-2.5 py-1 text-xs font-bold"
+                class="${isQueued ? 'vault-btn-primary' : 'vault-btn-ghost'} px-2.5 py-1 text-[11px]"
               >
-                ${isQueued ? '✓ In Queue' : '+ Queue Print'}
+                ${isQueued ? 'Queued' : '+ Queue'}
               </button>
             </div>
           </div>
@@ -1109,66 +831,48 @@
       }).join('');
     }
 
-    // Queue list has NO title card — directly renders the queue cards
     function renderQueueList(queuedModels) {
       const listEl = document.getElementById('queueList');
       if (queuedModels.length === 0) {
-        listEl.innerHTML = `
-          <div class="vault-card p-8 text-center text-xs" style="color: var(--muted);">
-            No models currently in the Print Queue. Click <strong>+ Queue Print</strong> on any model in your Library.
-          </div>`;
+        listEl.innerHTML = `<div class="vault-card p-10 text-center text-xs" style="color: var(--muted);">Your print queue is empty.</div>`;
         return;
       }
 
       listEl.innerHTML = queuedModels.map((m, idx) => `
         <div
           onclick="openModelDrawer('${m.id}')"
-          class="vault-card p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 cursor-pointer"
+          class="vault-card px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer"
         >
-          <div class="flex items-start gap-3.5">
-            <div class="flex flex-col items-center gap-1">
-              <span style="background-color: var(--accent); color: var(--accent-fg);" class="w-7 h-7 rounded font-black text-xs flex items-center justify-center">
-                #${idx + 1}
+          <div class="flex items-center gap-4 min-w-0">
+            <div class="flex items-center gap-1.5 shrink-0">
+              <span style="background-color: var(--accent-soft); color: var(--accent);" class="w-7 h-7 rounded font-bold text-xs flex items-center justify-center font-mono">
+                ${idx + 1}
               </span>
-              <div class="flex flex-col gap-0.5">
-                <button onclick="event.stopPropagation(); moveQueueOrder('${m.id}', -1)" class="vault-btn-secondary text-[10px] px-1.5 py-0.5">▲</button>
-                <button onclick="event.stopPropagation(); moveQueueOrder('${m.id}', 1)" class="vault-btn-secondary text-[10px] px-1.5 py-0.5">▼</button>
+              <div class="flex flex-col">
+                <button onclick="event.stopPropagation(); moveQueueOrder('${m.id}', -1)" class="text-[10px] px-1 opacity-60 hover:opacity-100">▲</button>
+                <button onclick="event.stopPropagation(); moveQueueOrder('${m.id}', 1)" class="text-[10px] px-1 opacity-60 hover:opacity-100">▼</button>
               </div>
             </div>
 
-            <div class="space-y-1.5">
-              <div class="flex items-center gap-2 flex-wrap">
-                <h3 class="text-sm font-black">${m.title}</h3>
-                ${badgeHtml(originLabel(m))}
-                ${badgeHtml(statusLabel(m.workflow.status), true)}
-              </div>
-              <div class="text-xs flex flex-wrap items-center gap-3 font-mono" style="color: var(--muted);">
-                <span>⏱️ ${m.specs?.estimatedPrintTimeDisplay || '—'}</span>
-                <span>⚖️ ${m.specs?.filamentWeightGrams || '—'}g</span>
-                <span>🎯 Filament: <strong style="color: var(--text);" class="font-sans">${m.workflow?.targetFilament || m.specs?.recommendedMaterial || 'Default'}</strong></span>
+            <div class="min-w-0 space-y-1">
+              <h3 class="text-sm font-semibold truncate">${m.title}</h3>
+              <div class="text-xs font-mono" style="color: var(--muted);">
+                ${m.specs?.estimatedPrintTimeDisplay || '—'} · ${m.specs?.filamentWeightGrams || '—'}g · ${m.workflow?.targetFilament || m.specs?.recommendedMaterial || 'PLA'}
               </div>
               ${
                 m.nextTimeSummary
-                  ? `<div style="background-color: var(--brass-soft); border: 1px solid var(--brass);" class="p-2 rounded text-xs">
-                      <strong>📌 Before Slicing:</strong> ${m.nextTimeSummary}
-                    </div>`
+                  ? `<p class="text-xs truncate" style="color: var(--brass);">📌 ${m.nextTimeSummary}</p>`
                   : ''
               }
             </div>
           </div>
 
-          <div class="flex sm:flex-col items-center sm:items-end gap-2 w-full sm:w-auto justify-end shrink-0">
-            <button
-              onclick="event.stopPropagation(); setWorkflowStatus('${m.id}', 'printing')"
-              class="vault-btn-primary px-3 py-1.5 text-xs"
-            >
-              🖨️ Start Print
+          <div class="flex items-center gap-2 shrink-0">
+            <button onclick="event.stopPropagation(); setWorkflowStatus('${m.id}', 'printing')" class="vault-btn-primary px-3 py-1.5 text-xs">
+              Start
             </button>
-            <button
-              onclick="event.stopPropagation(); setWorkflowStatus('${m.id}', 'printed')"
-              class="vault-btn-secondary px-3 py-1.5 text-xs font-bold"
-            >
-              ✅ Mark Printed
+            <button onclick="event.stopPropagation(); setWorkflowStatus('${m.id}', 'printed')" class="vault-btn-ghost px-3 py-1.5 text-xs">
+              Done
             </button>
           </div>
         </div>
@@ -1176,23 +880,21 @@
     }
 
     function renderSourcesDirectory() {
-      const grid = document.getElementById('sourcesGrid');
-      grid.innerHTML = EXTERNAL_REPOSITORIES.map((repo) => `
-        <div class="vault-card p-4 flex flex-col justify-between gap-3">
-          <div class="space-y-2">
-            <div class="flex items-center justify-between gap-2">
-              <span class="text-xs font-bold px-2 py-0.5 rounded" style="background-color: var(--surface-2); border: 1px solid var(--border);">${repo.badge}</span>
+      document.getElementById('sourcesGrid').innerHTML = EXTERNAL_REPOSITORIES.map((repo) => `
+        <div class="vault-card p-5 flex flex-col justify-between gap-4">
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-bold">${repo.name}</h3>
               <span class="text-[11px] font-mono" style="color: var(--muted);">${repo.formats}</span>
             </div>
-            <h3 class="text-base font-black">${repo.name}</h3>
             <p class="text-xs leading-relaxed" style="color: var(--muted);">${repo.description}</p>
           </div>
-          <div class="pt-2 flex items-center justify-between gap-2" style="border-top: 1px solid var(--border);">
-            <a href="${repo.url}" target="_blank" rel="noopener noreferrer" class="vault-btn-primary px-3.5 py-1.5 text-xs inline-flex items-center gap-1">
-              Open ${repo.name} ↗
+          <div class="flex items-center justify-between pt-3" style="border-top: 1px solid var(--border);">
+            <a href="${repo.url}" target="_blank" rel="noopener noreferrer" class="text-xs font-semibold" style="color: var(--accent);">
+              Open Site ↗
             </a>
-            <button onclick="prefillIngestFromSource('${repo.name}')" class="vault-btn-secondary px-2.5 py-1.5 text-xs font-semibold">
-              + Import from Here
+            <button onclick="prefillIngestFromSource('${repo.name}')" class="vault-btn-ghost px-2.5 py-1 text-[11px]">
+              + Import
             </button>
           </div>
         </div>
@@ -1201,163 +903,127 @@
 
     function jumpSearch(baseUrl) {
       const q = document.getElementById('repoSearchQuery').value.trim();
-      const target = q ? baseUrl + encodeURIComponent(q) : baseUrl;
-      window.open(target, '_blank', 'noopener,noreferrer');
+      window.open(q ? baseUrl + encodeURIComponent(q) : baseUrl, '_blank', 'noopener,noreferrer');
     }
 
     function prefillIngestFromSource(repoName) {
       const sel = document.getElementById('formSourceType');
-      const lower = repoName.toLowerCase();
-      if (lower.includes('makerworld')) sel.value = 'makerworld';
-      else if (lower.includes('printables')) sel.value = 'printables';
-      else if (lower.includes('thingiverse')) sel.value = 'thingiverse';
+      const l = repoName.toLowerCase();
+      if (l.includes('makerworld')) sel.value = 'makerworld';
+      else if (l.includes('printables')) sel.value = 'printables';
+      else if (l.includes('thingiverse')) sel.value = 'thingiverse';
       else sel.value = 'other';
       toggleSourceFields();
       switchTab('ingest');
     }
 
     // =========================================================================
-    // 6. DRAWER CONTENT RENDERER (Provenance + Pinned Note + Post-Print Logs)
+    // DRAWER INSPECTOR (Pinned multi-line editor + Past logs + Log New Print at bottom)
     // =========================================================================
     function renderDrawerContent(id) {
       const m = models.find((x) => x.id === id);
       if (!m) return;
-
       document.getElementById('drawerTitle').textContent = m.title;
-      document.getElementById('drawerBadges').innerHTML = `
-        ${badgeHtml(originLabel(m))}
-        ${badgeHtml(statusLabel(m.workflow.status), m.workflow.status === 'queued')}
-      `;
-
       const isQueued = m.workflow.status === 'queued';
 
       document.getElementById('drawerBody').innerHTML = `
-        <!-- Quick Queue Action Bar -->
-        <div class="flex items-center justify-between gap-2 p-3 rounded-lg" style="background-color: var(--bg); border: 1px solid var(--border);">
-          <div class="text-xs font-mono">
-            ⏱️ ${m.specs?.estimatedPrintTimeDisplay || '—'} • ⚖️ ${m.specs?.filamentWeightGrams || '—'}g • 🧵 ${m.specs?.recommendedMaterial || 'PLA'}
+        <div class="flex items-center justify-between text-xs">
+          <div class="font-mono" style="color: var(--muted);">
+            ${originText(m)} · ${m.specs?.estimatedPrintTimeDisplay || '—'} · ${m.specs?.filamentWeightGrams || '—'}g
           </div>
-          <button onclick="toggleQueueStatus('${m.id}')" class="${isQueued ? 'vault-btn-primary' : 'vault-btn-secondary'} px-3 py-1 text-xs font-bold">
-            ${isQueued ? '✓ In Print Queue' : '+ Add to Queue'}
+          <button onclick="toggleQueueStatus('${m.id}')" class="${isQueued ? 'vault-btn-primary' : 'vault-btn-ghost'} px-3 py-1 text-xs">
+            ${isQueued ? 'In Queue' : '+ Queue'}
           </button>
         </div>
 
-        <!-- Origin / Provenance Block -->
-        <div class="p-3 rounded-lg text-xs space-y-1.5" style="background-color: var(--bg); border: 1px solid var(--border);">
-          <div class="text-[11px] font-bold uppercase tracking-wider" style="color: var(--muted);">
-            ${m.source?.isPersonalDesign ? '🛠️ Personal CAD Metadata' : '🌐 External Repository Provenance'}
-          </div>
+        <!-- Provenance -->
+        <div class="text-xs space-y-1" style="color: var(--muted);">
           ${
             m.source?.isPersonalDesign
-              ? `<div class="grid grid-cols-2 gap-2">
-                  <div>CAD Software: <strong>${m.source.cadTool || 'Custom'}</strong></div>
-                  <div>Revision: <strong class="font-mono">${m.source.designVersion || 'v1.0'}</strong></div>
-                </div>`
-              : `<div class="space-y-1">
-                  <div>Designer: <strong>${m.source?.author || '—'}</strong> • License: <span>${m.source?.license || '—'}</span></div>
-                  ${m.source?.url ? `<div>Original Page: <a href="${m.source.url}" target="_blank" style="color: var(--accent);" class="underline break-all">${m.source.url}</a></div>` : ''}
-                </div>`
+              ? `<div>CAD: <strong style="color: var(--text);">${m.source.cadTool || 'Custom'}</strong> (${m.source.designVersion || 'v1.0'})</div>`
+              : `<div>By <strong style="color: var(--text);">${m.source?.author || '—'}</strong> · ${m.source?.license || '—'} ${m.source?.url ? `· <a href="${m.source.url}" target="_blank" style="color: var(--accent);" class="underline">Source ↗</a>` : ''}</div>`
           }
         </div>
 
-        <!-- Pinned "For Next Time" Banner (Large Multi-Line Textarea) -->
-        <div class="p-3.5 rounded-lg space-y-2" style="background-color: var(--brass-soft); border: 1.5px solid var(--brass);">
+        <!-- Large Pinned "For Next Time" Editor -->
+        <div class="p-3.5 rounded-lg space-y-2" style="background-color: var(--brass-soft); border: 1px solid var(--brass);">
           <div class="flex items-center justify-between">
-            <label for="pinnedNextTimeInput" class="block text-xs font-black">
-              📌 Pinned "For Next Time" Slicer & Print Notes
-            </label>
-            <button onclick="updatePinnedNextTime('${m.id}')" class="vault-btn-primary px-3 py-1 text-xs">
-              Save Note
-            </button>
+            <label for="pinnedNextTimeInput" class="text-xs font-semibold">📌 For Next Time</label>
+            <button onclick="updatePinnedNextTime('${m.id}')" class="vault-btn-primary px-2.5 py-1 text-[11px]">Save</button>
           </div>
           <textarea
             id="pinnedNextTimeInput"
             rows="4"
-            placeholder="Slicer scaling, supports, XY hole compensation, filament temp tweaks, orientation reminders..."
+            placeholder="Slicer scaling, supports, hole compensation, filament notes..."
             class="vault-input w-full px-3 py-2 text-xs leading-relaxed resize-y"
           >${(m.nextTimeSummary || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
         </div>
 
-        <!-- Post-Print Notes History List -->
-        <div class="space-y-2.5 pt-1">
-          <div class="flex items-center justify-between">
-            <h3 class="text-xs font-black uppercase tracking-wider">📝 Past Print History</h3>
-            <span class="text-xs font-mono" style="color: var(--muted);">${(m.printLogs || []).length} logs</span>
-          </div>
-
-          <div class="space-y-2">
-            ${
-              (m.printLogs || []).length === 0
-                ? `<div class="p-3 rounded-lg text-xs text-center" style="background-color: var(--bg); border: 1px solid var(--border); color: var(--muted);">No prints logged yet.</div>`
-                : (m.printLogs || []).map((log) => `
-                  <div class="p-3 rounded-lg text-xs space-y-1" style="background-color: var(--bg); border: 1px solid var(--border);">
-                    <div class="flex items-center justify-between font-bold">
-                      <span>${log.outcome === 'success' ? '✅ Success' : log.outcome === 'failed' ? '❌ Failed' : '⚠️ Needs Tweaks'} • ${log.filamentUsed || 'Filament'}</span>
-                      <span class="font-mono text-[11px]" style="color: var(--muted);">${log.date}</span>
-                    </div>
-                    <p>${log.notes}</p>
-                    ${log.forNextTime ? `<p style="color: var(--brass);" class="font-semibold">↳ Next Time: ${log.forNextTime}</p>` : ''}
+        <!-- Past Print History -->
+        <div class="space-y-2">
+          <div class="text-xs font-semibold" style="color: var(--muted);">Print History (${(m.printLogs || []).length})</div>
+          ${
+            (m.printLogs || []).length === 0
+              ? `<div class="text-xs py-2" style="color: var(--muted);">No prints logged yet.</div>`
+              : (m.printLogs || []).map((log) => `
+                <div class="p-3 rounded-lg text-xs space-y-1" style="background-color: var(--bg); border: 1px solid var(--border);">
+                  <div class="flex items-center justify-between font-medium">
+                    <span>${log.outcome === 'success' ? 'Success' : log.outcome === 'failed' ? 'Failed' : 'Needs Tweaks'} · ${log.filamentUsed || 'Filament'}</span>
+                    <span class="font-mono text-[11px]" style="color: var(--muted);">${log.date}</span>
                   </div>
-                `).join('')
-            }
-          </div>
+                  <p style="color: var(--muted);">${log.notes}</p>
+                  ${log.forNextTime ? `<p style="color: var(--brass);">↳ ${log.forNextTime}</p>` : ''}
+                </div>
+              `).join('')
+          }
         </div>
 
-        <!-- Log a New Print Attempt Form (At the Very Bottom of Slide-Out) -->
-        <div class="p-3.5 rounded-lg space-y-2.5" style="background-color: var(--bg); border: 1.5px solid var(--border-strong);">
-          <div class="text-xs font-black uppercase tracking-wider">➕ Log a New Print</div>
+        <!-- Log New Print (Bottom) -->
+        <div class="p-3.5 rounded-lg space-y-2.5" style="background-color: var(--bg); border: 1px solid var(--border);">
+          <div class="text-xs font-semibold">Log a Print</div>
           <div class="grid grid-cols-2 gap-2">
-            <select id="logOutcome" class="vault-input px-2.5 py-1.5 text-xs font-semibold">
-              <option value="success">✅ Printed Great</option>
-              <option value="needs_tweaks">⚠️ Needs Tweaks</option>
-              <option value="failed">❌ Failed Print</option>
+            <select id="logOutcome" class="vault-input px-2.5 py-1.5 text-xs">
+              <option value="success">Success</option>
+              <option value="needs_tweaks">Needs Tweaks</option>
+              <option value="failed">Failed</option>
             </select>
-            <input id="logFilament" type="text" placeholder="Filament used (e.g. PETG)" class="vault-input px-2.5 py-1.5 text-xs" />
+            <input id="logFilament" type="text" placeholder="Filament used" class="vault-input px-2.5 py-1.5 text-xs" />
           </div>
-          <textarea id="logNotes" rows="2" placeholder="How did the print turn out? (Fitment, surface quality...)" class="vault-input w-full px-2.5 py-1.5 text-xs resize-y"></textarea>
-          <input id="logNextTime" type="text" placeholder="Note for NEXT time (auto-updates pinned note above)..." class="vault-input w-full px-2.5 py-1.5 text-xs" />
-          <div class="flex justify-end pt-1">
-            <button onclick="addPrintLog('${m.id}')" class="vault-btn-primary w-full py-2 text-xs">
-              + Log Print Result
-            </button>
-          </div>
+          <textarea id="logNotes" rows="2" placeholder="How did it print?" class="vault-input w-full px-2.5 py-1.5 text-xs resize-y"></textarea>
+          <input id="logNextTime" type="text" placeholder="Note for next time (updates pinned note above)..." class="vault-input w-full px-2.5 py-1.5 text-xs" />
+          <button onclick="addPrintLog('${m.id}')" class="vault-btn-primary w-full py-2 text-xs">Log Print Result</button>
         </div>
       `;
     }
 
     // =========================================================================
-    // 7. WORKFLOW & LOGBOOK ACTIONS
+    // ACTIONS & FILE PARSING
     // =========================================================================
     function toggleQueueStatus(id, event) {
       if (event) event.stopPropagation();
       const m = models.find((x) => x.id === id);
       if (!m) return;
-      if (m.workflow.status === 'queued') {
-        m.workflow.status = 'archived';
-      } else {
-        m.workflow.status = 'queued';
-        m.workflow.queueOrder = models.filter((x) => x.workflow.status === 'queued').length;
-      }
+      m.workflow.status = m.workflow.status === 'queued' ? 'archived' : 'queued';
+      if (m.workflow.status === 'queued') m.workflow.queueOrder = models.filter((x) => x.workflow.status === 'queued').length;
       saveModels();
     }
 
     function moveQueueOrder(id, delta) {
-      const queued = models
-        .filter((m) => m.workflow.status === 'queued' || m.workflow.status === 'printing')
+      const queued = models.filter((m) => m.workflow.status === 'queued' || m.workflow.status === 'printing')
         .sort((a, b) => (a.workflow.queueOrder || 99) - (b.workflow.queueOrder || 99));
       const idx = queued.findIndex((m) => m.id === id);
       const swapIdx = idx + delta;
       if (idx < 0 || swapIdx < 0 || swapIdx >= queued.length) return;
-      const temp = queued[idx].workflow.queueOrder;
+      const tmp = queued[idx].workflow.queueOrder;
       queued[idx].workflow.queueOrder = queued[swapIdx].workflow.queueOrder;
-      queued[swapIdx].workflow.queueOrder = temp;
+      queued[swapIdx].workflow.queueOrder = tmp;
       saveModels();
     }
 
-    function setWorkflowStatus(id, newStatus) {
+    function setWorkflowStatus(id, st) {
       const m = models.find((x) => x.id === id);
       if (!m) return;
-      m.workflow.status = newStatus;
+      m.workflow.status = st;
       saveModels();
     }
 
@@ -1372,11 +1038,10 @@
       const m = models.find((x) => x.id === id);
       if (!m) return;
       const outcome = document.getElementById('logOutcome').value;
-      const filamentUsed = document.getElementById('logFilament').value.trim() || m.workflow.targetFilament || 'PETG';
+      const filamentUsed = document.getElementById('logFilament').value.trim() || 'PETG';
       const notes = document.getElementById('logNotes').value.trim();
       const forNextTime = document.getElementById('logNextTime').value.trim();
       if (!notes && !forNextTime) return;
-
       m.printLogs.unshift({
         logId: 'log_' + Date.now(),
         date: new Date().toISOString().slice(0, 10),
@@ -1390,9 +1055,6 @@
       saveModels();
     }
 
-    // =========================================================================
-    // 8. FILE INGESTION (.STL, .GCODE, .3MF)
-    // =========================================================================
     function handleFileSelect(event) {
       const file = event.target.files?.[0];
       if (file) processIngestedFile(file);
@@ -1400,44 +1062,37 @@
 
     async function processIngestedFile(file) {
       const ext = file.name.split('.').pop().toLowerCase();
-      const baseTitle = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ');
-      const sizeMB = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
-
       if (!document.getElementById('formTitle').value) {
-        document.getElementById('formTitle').value = baseTitle;
+        document.getElementById('formTitle').value = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ');
       }
-
-      pendingParsedFile = { fileName: file.name, extension: ext, sizeDisplay: sizeMB };
+      pendingParsedFile = { fileName: file.name, extension: ext };
       const statusEl = document.getElementById('droppedFileStatus');
 
       if (ext === 'stl') {
-        const buffer = await file.arrayBuffer();
-        const geom = parseStlBufferToGeometry(buffer);
+        const geom = parseStlBufferToGeometry(await file.arrayBuffer());
         geom.computeBoundingBox();
         const size = new THREE.Vector3();
         geom.boundingBox.getSize(size);
-        const dimsStr = `${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ${size.z.toFixed(1)}`;
+        const dims = `${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ${size.z.toFixed(1)}`;
         pendingCustomGeometry = geom;
-        document.getElementById('formDims').value = dimsStr;
-        statusEl.textContent = `✔ Loaded STL: ${file.name} (${sizeMB}) — Bounding Box: ${dimsStr} mm`;
+        document.getElementById('formDims').value = dims;
+        statusEl.textContent = `Loaded STL: ${file.name} (${dims} mm)`;
       } else if (ext === 'gcode' || ext === 'gco') {
         const text = await file.text();
         const tMatch = text.match(/estimated printing time.*=\s*(.+)/i);
         const wMatch = text.match(/filament used \[g\]\s*=\s*([\d.]+)/i);
-        const lMatch = text.match(/layer_height\s*=\s*([\d.]+)/i);
         if (tMatch) document.getElementById('formPrintTime').value = tMatch[1].trim();
         if (wMatch) document.getElementById('formWeight').value = parseFloat(wMatch[1]);
-        if (lMatch) document.getElementById('formLayer').value = `${lMatch[1]}mm`;
-        statusEl.textContent = `✔ Parsed G-Code Slicer Headers: ${file.name} (${sizeMB})`;
+        statusEl.textContent = `Parsed G-code headers: ${file.name}`;
       } else {
-        statusEl.textContent = `✔ Attached File: ${file.name} (${sizeMB})`;
+        statusEl.textContent = `Attached: ${file.name}`;
       }
     }
 
     function toggleSourceFields() {
-      const isPersonal = document.getElementById('formSourceType').value === 'personal';
-      document.getElementById('personalSourceGroup').classList.toggle('hidden', !isPersonal);
-      document.getElementById('externalSourceGroup').classList.toggle('hidden', isPersonal);
+      const isP = document.getElementById('formSourceType').value === 'personal';
+      document.getElementById('personalSourceGroup').classList.toggle('hidden', !isP);
+      document.getElementById('externalSourceGroup').classList.toggle('hidden', isP);
     }
 
     function autoDetectSourceFromUrl() {
@@ -1449,39 +1104,30 @@
     }
 
     function saveNewModel() {
-      const title = document.getElementById('formTitle').value.trim() || 'Untitled 3D Model';
-      const sourceType = document.getElementById('formSourceType').value;
-      const isPersonal = sourceType === 'personal';
-      const dims = document.getElementById('formDims').value.trim() || '100 × 100 × 50';
+      const title = document.getElementById('formTitle').value.trim() || 'Untitled Model';
+      const st = document.getElementById('formSourceType').value;
+      const isP = st === 'personal';
       const status = document.getElementById('formStatus').value;
-
-      const newModel = {
+      models.unshift({
         id: 'm_' + Math.random().toString(36).slice(2, 8),
         title,
-        sourceType,
-        category: document.getElementById('formCategory').value.trim() || 'General',
-        tags: document.getElementById('formTags').value.split(',').map((t) => t.trim()).filter(Boolean),
-        shapePreset: isPersonal ? 'flange' : 'gridfinity',
+        sourceType: st,
+        shapePreset: isP ? 'flange' : 'gridfinity',
         customGeometry: pendingCustomGeometry || null,
         source: {
-          isPersonalDesign: isPersonal,
-          siteName: isPersonal ? 'Personal CAD' : sourceType,
+          isPersonalDesign: isP,
+          siteName: isP ? 'Personal CAD' : st,
           url: document.getElementById('formUrl').value.trim(),
-          author: isPersonal ? 'Keith' : (document.getElementById('formAuthor').value.trim() || 'Designer'),
-          license: isPersonal ? 'Personal' : (document.getElementById('formLicense').value.trim() || 'CC BY-NC'),
-          cadTool: isPersonal ? (document.getElementById('formCadTool').value.trim() || 'Fusion 360') : null,
-          designVersion: isPersonal ? (document.getElementById('formVersion').value.trim() || 'v1.0') : null
+          author: isP ? 'Keith' : (document.getElementById('formAuthor').value.trim() || 'Designer'),
+          cadTool: isP ? (document.getElementById('formCadTool').value.trim() || 'Fusion 360') : null,
+          designVersion: isP ? (document.getElementById('formVersion').value.trim() || 'v1.0') : null
         },
-        files: pendingParsedFile
-          ? [pendingParsedFile]
-          : [{ fileName: title.toLowerCase().replace(/\s+/g, '_') + '.stl', extension: 'stl' }],
+        files: pendingParsedFile ? [pendingParsedFile] : [{ fileName: 'model.stl', extension: 'stl' }],
         specs: {
-          dimensionsDisplay: dims.includes('mm') ? dims : `${dims} mm`,
+          dimensionsDisplay: (document.getElementById('formDims').value.trim() || '100 × 100 × 50') + ' mm',
           estimatedPrintTimeDisplay: document.getElementById('formPrintTime').value.trim() || '1h 30m',
-          estimatedPrintTimeMinutes: 90,
           filamentWeightGrams: parseFloat(document.getElementById('formWeight').value) || 40.0,
-          recommendedMaterial: document.getElementById('formMaterial').value.trim() || 'PETG',
-          layerHeightMm: document.getElementById('formLayer').value.trim() || '0.20mm'
+          recommendedMaterial: document.getElementById('formMaterial').value.trim() || 'PETG'
         },
         workflow: {
           status,
@@ -1490,9 +1136,7 @@
         },
         nextTimeSummary: document.getElementById('formNextTime').value.trim(),
         printLogs: []
-      };
-
-      models.unshift(newModel);
+      });
       pendingParsedFile = null;
       pendingCustomGeometry = null;
       saveModels();
@@ -1500,10 +1144,8 @@
     }
 
     function exportVaultJson() {
-      const blob = new Blob([JSON.stringify({ models }, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
+      a.href = URL.createObjectURL(new Blob([JSON.stringify({ models }, null, 2)], { type: 'application/json' }));
       a.download = '3d-model-vault-backup.json';
       a.click();
     }
