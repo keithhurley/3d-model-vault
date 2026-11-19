@@ -1260,61 +1260,66 @@
           }
         </div>
 
-        <!-- Pinned "For Next Time" Banner -->
-        <div class="p-3 rounded-lg space-y-1.5" style="background-color: var(--brass-soft); border: 1.5px solid var(--brass);">
-          <label class="block text-xs font-black">
-            📌 Pinned "For Next Time" Slicer Note
-          </label>
-          <div class="flex gap-1.5">
-            <input
-              id="pinnedNextTimeInput"
-              type="text"
-              value="${(m.nextTimeSummary || '').replace(/"/g, '&quot;')}"
-              placeholder="Slicer scaling, supports, hole compensation..."
-              class="vault-input flex-1 px-2.5 py-1 text-xs"
-            />
+        <!-- Pinned "For Next Time" Banner (Large Multi-Line Textarea) -->
+        <div class="p-3.5 rounded-lg space-y-2" style="background-color: var(--brass-soft); border: 1.5px solid var(--brass);">
+          <div class="flex items-center justify-between">
+            <label for="pinnedNextTimeInput" class="block text-xs font-black">
+              📌 Pinned "For Next Time" Slicer & Print Notes
+            </label>
             <button onclick="updatePinnedNextTime('${m.id}')" class="vault-btn-primary px-3 py-1 text-xs">
-              Save
+              Save Note
             </button>
           </div>
+          <textarea
+            id="pinnedNextTimeInput"
+            rows="4"
+            placeholder="Slicer scaling, supports, XY hole compensation, filament temp tweaks, orientation reminders..."
+            class="vault-input w-full px-3 py-2 text-xs leading-relaxed resize-y"
+          >${(m.nextTimeSummary || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
         </div>
 
-        <!-- Post-Print Notes & Attempt History -->
+        <!-- Post-Print Notes History List -->
         <div class="space-y-2.5 pt-1">
           <div class="flex items-center justify-between">
-            <h3 class="text-xs font-black uppercase tracking-wider">📝 Post-Print Notes & Logbook</h3>
+            <h3 class="text-xs font-black uppercase tracking-wider">📝 Past Print History</h3>
             <span class="text-xs font-mono" style="color: var(--muted);">${(m.printLogs || []).length} logs</span>
           </div>
 
-          <div class="p-3 rounded-lg space-y-2" style="background-color: var(--bg); border: 1px solid var(--border);">
-            <div class="grid grid-cols-2 gap-2">
-              <select id="logOutcome" class="vault-input px-2 py-1.5 text-xs font-semibold">
-                <option value="success">✅ Printed Great</option>
-                <option value="needs_tweaks">⚠️ Needs Tweaks</option>
-                <option value="failed">❌ Failed Print</option>
-              </select>
-              <input id="logFilament" type="text" placeholder="Filament used (e.g. PETG)" class="vault-input px-2.5 py-1.5 text-xs" />
-            </div>
-            <input id="logNotes" type="text" placeholder="How did the print turn out? (Fitment, surface quality...)" class="vault-input w-full px-2.5 py-1.5 text-xs" />
-            <div class="flex gap-1.5">
-              <input id="logNextTime" type="text" placeholder="Note for NEXT time (updates pinned reminder)..." class="vault-input flex-1 px-2.5 py-1.5 text-xs" />
-              <button onclick="addPrintLog('${m.id}')" class="vault-btn-primary px-3.5 py-1.5 text-xs whitespace-nowrap">
-                + Log Print
-              </button>
-            </div>
-          </div>
-
           <div class="space-y-2">
-            ${(m.printLogs || []).map((log) => `
-              <div class="p-3 rounded-lg text-xs space-y-1" style="background-color: var(--bg); border: 1px solid var(--border);">
-                <div class="flex items-center justify-between font-bold">
-                  <span>${log.outcome === 'success' ? '✅ Success' : log.outcome === 'failed' ? '❌ Failed' : '⚠️ Needs Tweaks'} • ${log.filamentUsed || 'Filament'}</span>
-                  <span class="font-mono text-[11px]" style="color: var(--muted);">${log.date}</span>
-                </div>
-                <p>${log.notes}</p>
-                ${log.forNextTime ? `<p style="color: var(--brass);" class="font-semibold">↳ Next Time: ${log.forNextTime}</p>` : ''}
-              </div>
-            `).join('')}
+            ${
+              (m.printLogs || []).length === 0
+                ? `<div class="p-3 rounded-lg text-xs text-center" style="background-color: var(--bg); border: 1px solid var(--border); color: var(--muted);">No prints logged yet.</div>`
+                : (m.printLogs || []).map((log) => `
+                  <div class="p-3 rounded-lg text-xs space-y-1" style="background-color: var(--bg); border: 1px solid var(--border);">
+                    <div class="flex items-center justify-between font-bold">
+                      <span>${log.outcome === 'success' ? '✅ Success' : log.outcome === 'failed' ? '❌ Failed' : '⚠️ Needs Tweaks'} • ${log.filamentUsed || 'Filament'}</span>
+                      <span class="font-mono text-[11px]" style="color: var(--muted);">${log.date}</span>
+                    </div>
+                    <p>${log.notes}</p>
+                    ${log.forNextTime ? `<p style="color: var(--brass);" class="font-semibold">↳ Next Time: ${log.forNextTime}</p>` : ''}
+                  </div>
+                `).join('')
+            }
+          </div>
+        </div>
+
+        <!-- Log a New Print Attempt Form (At the Very Bottom of Slide-Out) -->
+        <div class="p-3.5 rounded-lg space-y-2.5" style="background-color: var(--bg); border: 1.5px solid var(--border-strong);">
+          <div class="text-xs font-black uppercase tracking-wider">➕ Log a New Print</div>
+          <div class="grid grid-cols-2 gap-2">
+            <select id="logOutcome" class="vault-input px-2.5 py-1.5 text-xs font-semibold">
+              <option value="success">✅ Printed Great</option>
+              <option value="needs_tweaks">⚠️ Needs Tweaks</option>
+              <option value="failed">❌ Failed Print</option>
+            </select>
+            <input id="logFilament" type="text" placeholder="Filament used (e.g. PETG)" class="vault-input px-2.5 py-1.5 text-xs" />
+          </div>
+          <textarea id="logNotes" rows="2" placeholder="How did the print turn out? (Fitment, surface quality...)" class="vault-input w-full px-2.5 py-1.5 text-xs resize-y"></textarea>
+          <input id="logNextTime" type="text" placeholder="Note for NEXT time (auto-updates pinned note above)..." class="vault-input w-full px-2.5 py-1.5 text-xs" />
+          <div class="flex justify-end pt-1">
+            <button onclick="addPrintLog('${m.id}')" class="vault-btn-primary w-full py-2 text-xs">
+              + Log Print Result
+            </button>
           </div>
         </div>
       `;
