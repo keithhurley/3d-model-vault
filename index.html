@@ -1,0 +1,1407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Model Vault — Serverless 3D Model Storage & Print Queue</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --panel-hover: #263449;
+      --border: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-dark: #0284c7;
+      --amber: #f59e0b;
+      --emerald: #10b981;
+      --purple: #a855f7;
+    }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+    }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    .drop-active {
+      border-color: #38bdf8 !important;
+      background-color: rgba(56, 189, 248, 0.08) !important;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Top Navigation Header -->
+  <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-sky-500/15 border border-sky-400/30 flex items-center justify-center text-sky-400 font-bold text-lg shadow-inner">
+          3D
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg font-bold tracking-tight text-white">3D Model Vault</h1>
+            <span id="syncBadge" class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+              Local Prototype (localStorage)
+            </span>
+          </div>
+          <p class="text-xs text-slate-400">Serverless Repository • Print Queue Waitlist • Post-Print Logbook</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="flex items-center gap-1 bg-slate-800/80 p-1 rounded-xl border border-slate-700/70">
+        <button onclick="switchTab('library')" id="tab-library" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 bg-sky-500 text-slate-950">
+          <span>📚 Library</span>
+          <span id="count-library" class="px-1.5 py-0.2 rounded-full text-[11px] bg-slate-950/20">0</span>
+        </button>
+        <button onclick="switchTab('queue')" id="tab-queue" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 text-slate-300 hover:text-white">
+          <span>⏳ Print Queue</span>
+          <span id="count-queue" class="px-1.5 py-0.2 rounded-full text-[11px] bg-amber-500/20 text-amber-300 border border-amber-500/30">0</span>
+        </button>
+        <button onclick="switchTab('ingest')" id="tab-ingest" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 text-slate-300 hover:text-white">
+          <span>➕ Add / Drop Files</span>
+        </button>
+        <button onclick="switchTab('settings')" id="tab-settings" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 text-slate-300 hover:text-white">
+          <span>⚙️ Cloud & Setup</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- Left / Center Column (8 cols): Active View -->
+    <section class="lg:col-span-7 xl:col-span-8 flex flex-col gap-5">
+
+      <!-- VIEW 1: LIBRARY -->
+      <div id="view-library" class="space-y-4">
+        <!-- Search & Filter Bar -->
+        <div class="bg-slate-800/70 border border-slate-700/80 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3">
+          <div class="relative flex-1 min-w-[200px]">
+            <input
+              id="searchInput"
+              type="text"
+              oninput="renderAll()"
+              placeholder="Search models, tags, filaments, or 'next time' notes..."
+              class="w-full bg-slate-900/90 border border-slate-700 rounded-lg pl-3.5 pr-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-sky-400"
+            />
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <select id="filterSource" onchange="renderAll()" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-400">
+              <option value="all">All Sources</option>
+              <option value="personal">🛠️ Personal Designs</option>
+              <option value="makerworld">🟢 MakerWorld</option>
+              <option value="printables">🟠 Printables</option>
+              <option value="thingiverse">🔵 Thingiverse</option>
+              <option value="other">🌐 Other Repo</option>
+            </select>
+            <select id="filterStatus" onchange="renderAll()" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-400">
+              <option value="all">All Statuses</option>
+              <option value="queued">⏳ In Print Queue</option>
+              <option value="printing">🖨️ Printing Now</option>
+              <option value="printed">✅ Printed</option>
+              <option value="archived">📦 Archived</option>
+              <option value="inbox">📥 Inbox (Needs File)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Model Cards Grid -->
+        <div id="libraryGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+      </div>
+
+      <!-- VIEW 2: PRINT QUEUE / WAITLIST -->
+      <div id="view-queue" class="hidden space-y-4">
+        <div class="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 class="text-sm font-bold text-amber-300 flex items-center gap-2">
+              <span>⏳ Active Print Queue & Project Waitlist</span>
+            </h2>
+            <p class="text-xs text-slate-300 mt-0.5">
+              Prioritize what to print next. Models with previous print logs automatically surface their <strong class="text-amber-200">"For Next Time"</strong> notes here.
+            </p>
+          </div>
+          <div class="text-right">
+            <div id="queueTotals" class="text-xs font-mono text-amber-200">0 models • 0h 0m est • 0g filament</div>
+          </div>
+        </div>
+
+        <div id="queueList" class="space-y-3"></div>
+      </div>
+
+      <!-- VIEW 3: ADD / DROP FILES (INGESTION) -->
+      <div id="view-ingest" class="hidden space-y-5">
+        <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-5 space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-base font-bold text-white">Ingest 3D Model (Download & Drop or Personal Upload)</h2>
+              <p class="text-xs text-slate-400 mt-0.5">
+                Drop an <code class="text-sky-300">.stl</code>, <code class="text-sky-300">.gcode</code>, or <code class="text-sky-300">.3mf</code> file to auto-extract dimensions, print time, filament weight, and 3D geometry.
+              </p>
+            </div>
+            <span class="text-xs px-2.5 py-1 rounded-md bg-sky-500/15 text-sky-300 border border-sky-500/30 font-mono">
+              Auto-Parser Active
+            </span>
+          </div>
+
+          <!-- Drag & Drop Zone -->
+          <div
+            id="dropZone"
+            onclick="document.getElementById('fileInput').click()"
+            class="border-2 border-dashed border-slate-600 hover:border-sky-400 rounded-xl p-6 text-center cursor-pointer transition bg-slate-900/50"
+          >
+            <input id="fileInput" type="file" accept=".stl,.gcode,.gco,.3mf,.zip,.step,.f3d" class="hidden" onchange="handleFileSelect(event)" />
+            <div class="text-2xl mb-1">📂</div>
+            <p class="text-xs font-semibold text-slate-200">
+              Drag & drop <span class="text-sky-400">.STL</span>, <span class="text-sky-400">.3MF</span>, or <span class="text-sky-400">.GCODE</span> here, or click to browse
+            </p>
+            <p id="droppedFileStatus" class="text-xs text-slate-400 mt-1">
+              STL calculates exact X×Y×Z mm bounding box • G-code parses slicer time & grams • 3MF inspects archive contents
+            </p>
+          </div>
+
+          <!-- Form Fields -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2">
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">Model Title *</label>
+              <input id="formTitle" type="text" placeholder="e.g., Gridfinity 2x3 Pliers Holder" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">Origin / Source Type</label>
+              <select id="formSourceType" onchange="toggleSourceFields()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">
+                <option value="personal">🛠️ Personal Upload / Original CAD</option>
+                <option value="makerworld">🟢 MakerWorld</option>
+                <option value="printables">🟠 Printables</option>
+                <option value="thingiverse">🔵 Thingiverse</option>
+                <option value="other">🌐 Other Repository</option>
+              </select>
+            </div>
+
+            <!-- External Repo Fields -->
+            <div id="externalSourceGroup" class="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-3 hidden bg-slate-900/60 p-3 rounded-lg border border-slate-700/70">
+              <div class="sm:col-span-2">
+                <label class="block text-xs font-medium text-slate-300 mb-1">Original Page URL (Thingiverse / MakerWorld / Printables)</label>
+                <input id="formUrl" type="url" oninput="autoDetectSourceFromUrl()" placeholder="https://makerworld.com/en/models/..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Designer / Author</label>
+                <input id="formAuthor" type="text" placeholder="e.g., MakerJane" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">License</label>
+                <input id="formLicense" type="text" placeholder="CC BY-NC-SA 4.0" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white" />
+              </div>
+            </div>
+
+            <!-- Personal CAD Fields -->
+            <div id="personalSourceGroup" class="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-900/60 p-3 rounded-lg border border-slate-700/70">
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">CAD Tool Used</label>
+                <input id="formCadTool" type="text" placeholder="e.g., Fusion 360, Tinkercad, FreeCAD, OpenSCAD" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Design Revision / Version</label>
+                <input id="formVersion" type="text" placeholder="e.g., v1.2" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white" />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">Category</label>
+              <input id="formCategory" type="text" placeholder="e.g., Workshop, Gridfinity, Enclosure" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">Tags (comma-separated)</label>
+              <input id="formTags" type="text" placeholder="gridfinity, tool-holder, petg" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white" />
+            </div>
+
+            <!-- Auto-extracted or Manual Specs -->
+            <div class="sm:col-span-2 bg-slate-900/80 border border-slate-700/80 rounded-lg p-3 space-y-2">
+              <div class="text-xs font-semibold text-sky-300 flex items-center justify-between">
+                <span>📐 Technical & Slicer Specs (Auto-filled on file drop or editable)</span>
+                <span id="extractedBadge" class="text-[11px] text-slate-400 font-normal">Waiting for file...</span>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                <div>
+                  <label class="block text-[11px] text-slate-400">Size X×Y×Z (mm)</label>
+                  <input id="formDims" type="text" placeholder="84 × 126 × 42" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono" />
+                </div>
+                <div>
+                  <label class="block text-[11px] text-slate-400">Est. Print Time</label>
+                  <input id="formPrintTime" type="text" placeholder="2h 15m" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono" />
+                </div>
+                <div>
+                  <label class="block text-[11px] text-slate-400">Filament (g)</label>
+                  <input id="formWeight" type="number" step="0.1" placeholder="68.4" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono" />
+                </div>
+                <div>
+                  <label class="block text-[11px] text-slate-400">Material</label>
+                  <input id="formMaterial" type="text" placeholder="PETG / PLA" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white" />
+                </div>
+                <div>
+                  <label class="block text-[11px] text-slate-400">Layer Height</label>
+                  <input id="formLayer" type="text" placeholder="0.20mm" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Initial Workflow & Notes -->
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">Initial Queue Status</label>
+              <select id="formStatus" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">
+                <option value="queued">⏳ Add directly to Print Queue (Waitlist)</option>
+                <option value="archived">📦 Save to Library Archive</option>
+                <option value="printing">🖨️ Currently Printing</option>
+                <option value="printed">✅ Already Printed</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">Target Filament / Printer</label>
+              <input id="formTargetFilament" type="text" placeholder="e.g., Polymaker PETG Black on P1S" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white" />
+            </div>
+
+            <div class="sm:col-span-2">
+              <label class="block text-xs font-medium text-amber-300 mb-1">📌 Pinned "For Next Time" Reminder / Slicer Note</label>
+              <input id="formNextTime" type="text" placeholder="e.g., Use 15% gyroid infill; add +0.1mm XY hole compensation for magnets" class="w-full bg-slate-900 border border-amber-500/40 rounded-lg px-3 py-2 text-xs text-white" />
+            </div>
+          </div>
+
+          <div class="flex items-center justify-end gap-3 pt-2">
+            <button onclick="saveNewModel()" class="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs transition shadow">
+              💾 Save Model to Vault
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 4: CLOUD & BOOKMARKLET SETUP -->
+      <div id="view-settings" class="hidden space-y-4">
+        <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-5 space-y-4">
+          <h2 class="text-base font-bold text-white">Cloud Backend Connections (Firebase + Google Apps Script)</h2>
+          <p class="text-xs text-slate-300">
+            By default, this prototype runs offline in your browser using <code class="text-sky-300">localStorage</code>. When you deploy your Firebase Realtime Database and Google Apps Script Drive webhook, paste their endpoints below to sync across all your computers.
+          </p>
+          <div class="grid grid-cols-1 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">Firebase Realtime Database REST URL (Optional)</label>
+              <input id="cfgFirebaseUrl" type="url" placeholder="https://your-project-id-default-rtdb.firebaseio.com" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white font-mono" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">Google Apps Script Web App Webhook URL (Optional)</label>
+              <input id="cfgGasUrl" type="url" placeholder="https://script.google.com/macros/s/AKfycb.../exec" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white font-mono" />
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+            <div class="flex items-center gap-2">
+              <button onclick="exportVaultJson()" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs text-white font-medium">
+                ⬇️ Export Vault JSON
+              </button>
+              <button onclick="resetDemoData()" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-rose-500/30 text-xs text-slate-300 hover:text-rose-200 font-medium">
+                🔄 Reset Sample Models
+              </button>
+            </div>
+            <button onclick="saveCloudConfig()" class="px-4 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs">
+              Save Connection Settings
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Right Column (5 cols / 4 cols): Interactive 3D Preview & Selected Model Inspector / Post-Print Notes -->
+    <aside class="lg:col-span-5 xl:col-span-4 flex flex-col gap-5">
+
+      <!-- Three.js Interactive 3D Viewport Card -->
+      <div class="bg-slate-800/80 border border-slate-700 rounded-xl overflow-hidden flex flex-col">
+        <div class="px-3.5 py-2.5 border-b border-slate-700 flex items-center justify-between bg-slate-900/60">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span>
+            <h3 id="viewerTitle" class="text-xs font-bold text-white truncate max-w-[200px]">Three.js 3D Preview</h3>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button onclick="toggleWireframe()" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 border border-slate-700">
+              Wireframe
+            </button>
+            <button onclick="toggleAutoRotate()" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 border border-slate-700">
+              Spin
+            </button>
+          </div>
+        </div>
+        <div class="relative w-full h-60 bg-slate-950">
+          <canvas id="threeCanvas" class="w-full h-full block cursor-grab active:cursor-grabbing"></canvas>
+          <div id="viewerDimsOverlay" class="absolute bottom-2 left-2.5 px-2 py-0.5 rounded bg-slate-900/85 border border-slate-700 text-[11px] font-mono text-sky-300">
+            84.0 × 126.0 × 42.5 mm
+          </div>
+          <div class="absolute bottom-2 right-2.5 text-[10px] text-slate-400 bg-slate-900/70 px-1.5 py-0.5 rounded">
+            Drag to rotate • Scroll to zoom
+          </div>
+        </div>
+      </div>
+
+      <!-- Selected Model Inspector & Post-Print Notes Logbook -->
+      <div id="inspectorCard" class="bg-slate-800/80 border border-slate-700 rounded-xl p-4 space-y-4"></div>
+
+    </aside>
+  </main>
+
+  <script>
+    // =========================================================================
+    // 1. SAMPLE DATA (Following docs/architecture-and-metadata.md Unified Schema)
+    // =========================================================================
+    const STORAGE_KEY = '3d_model_vault_v1';
+    const DEFAULT_MODELS = [
+      {
+        id: 'm_8f92a1',
+        title: 'Gridfinity 2x3 Pliers & Flush Cutter Holder',
+        sourceType: 'makerworld',
+        category: 'Workshop & Tools',
+        tags: ['gridfinity', 'pliers', 'organizer', 'workshop'],
+        shapePreset: 'gridfinity',
+        createdAt: '2026-11-18T19:30:00Z',
+        source: {
+          isPersonalDesign: false,
+          siteName: 'MakerWorld',
+          url: 'https://makerworld.com/en/models/123456',
+          author: 'MakerJane',
+          license: 'CC BY-NC-SA 4.0',
+          cadTool: null,
+          designVersion: null
+        },
+        files: [
+          { fileName: 'gridfinity_pliers_2x3.stl', extension: 'stl', role: 'printable', sizeDisplay: '4.6 MB' },
+          { fileName: 'gridfinity_pliers_2x3_bambu.3mf', extension: '3mf', role: 'print_profile', sizeDisplay: '2.1 MB' }
+        ],
+        specs: {
+          dimensionsDisplay: '84.0 × 126.0 × 42.5 mm',
+          estimatedPrintTimeDisplay: '2h 14m',
+          estimatedPrintTimeMinutes: 134,
+          filamentWeightGrams: 68.4,
+          recommendedMaterial: 'PETG',
+          layerHeightMm: '0.20mm'
+        },
+        workflow: {
+          status: 'queued',
+          queueOrder: 1,
+          priority: 'high',
+          targetFilament: 'Polymaker PETG Dark Grey (Bambu P1S)'
+        },
+        nextTimeSummary: 'Add +0.1mm XY hole compensation in slicer so 6x2mm magnets press-fit without glue; 15% gyroid infill is plenty strong.',
+        printLogs: [
+          {
+            logId: 'log_1',
+            date: '2026-11-18',
+            outcome: 'needs_tweaks',
+            filamentUsed: 'eSUN PLA+ Black',
+            notes: 'Top cavities fit flush cutters great, but bottom magnet pockets were 0.1mm too tight.',
+            forNextTime: 'Add +0.1mm XY hole compensation before printing the second bin in PETG.'
+          }
+        ]
+      },
+      {
+        id: 'm_3c41b9',
+        title: 'Custom Enclosure Filament Pass-Through Gland',
+        sourceType: 'personal',
+        category: 'Printer Upgrades',
+        tags: ['enclosure', 'ptfe', 'custom-cad', 'threaded'],
+        shapePreset: 'flange',
+        createdAt: '2026-11-19T10:15:00Z',
+        source: {
+          isPersonalDesign: true,
+          siteName: 'Personal CAD',
+          url: '',
+          author: 'Keith',
+          license: 'Personal',
+          cadTool: 'Fusion 360',
+          designVersion: 'v1.3'
+        },
+        files: [
+          { fileName: 'ptfe_passthrough_v1.3.f3d', extension: 'f3d', role: 'cad_source', sizeDisplay: '1.8 MB' },
+          { fileName: 'ptfe_passthrough_v1.3.stl', extension: 'stl', role: 'printable', sizeDisplay: '940 KB' }
+        ],
+        specs: {
+          dimensionsDisplay: '38.0 × 38.0 × 28.0 mm',
+          estimatedPrintTimeDisplay: '0h 48m',
+          estimatedPrintTimeMinutes: 48,
+          filamentWeightGrams: 19.2,
+          recommendedMaterial: 'ASA / PETG',
+          layerHeightMm: '0.16mm'
+        },
+        workflow: {
+          status: 'queued',
+          queueOrder: 2,
+          priority: 'normal',
+          targetFilament: 'Bambu ASA Black'
+        },
+        nextTimeSummary: 'Print threads at 0.16mm layer height with outer-inner wall order so M18 nut threads smoothly.',
+        printLogs: [
+          {
+            logId: 'log_2',
+            date: '2026-11-19',
+            outcome: 'success',
+            filamentUsed: 'PETG Grey',
+            notes: 'v1.3 thread clearance of 0.25mm threaded effortlessly off the build plate.',
+            forNextTime: 'Keep 0.16mm layer height and 4 wall loops for strength around PC4-M10 fitting.'
+          }
+        ]
+      },
+      {
+        id: 'm_7a19e4',
+        title: 'Articulated Desk Cable Management Spine',
+        sourceType: 'printables',
+        category: 'Desk & Office',
+        tags: ['cable-management', 'print-in-place', 'desk'],
+        shapePreset: 'gear',
+        createdAt: '2026-11-15T14:00:00Z',
+        source: {
+          isPersonalDesign: false,
+          siteName: 'Printables',
+          url: 'https://www.printables.com/model/987654',
+          author: 'StudioK',
+          license: 'CC BY 4.0',
+          cadTool: null,
+          designVersion: null
+        },
+        files: [
+          { fileName: 'cable_spine_links.stl', extension: 'stl', role: 'printable', sizeDisplay: '3.2 MB' },
+          { fileName: 'cable_spine_0.2mm_PETG.gcode', extension: 'gcode', role: 'sliced', sizeDisplay: '8.4 MB' }
+        ],
+        specs: {
+          dimensionsDisplay: '145.0 × 62.0 × 24.0 mm',
+          estimatedPrintTimeDisplay: '3h 05m',
+          estimatedPrintTimeMinutes: 185,
+          filamentWeightGrams: 84.0,
+          recommendedMaterial: 'PETG (Not brittle PLA)',
+          layerHeightMm: '0.20mm'
+        },
+        workflow: {
+          status: 'printed',
+          queueOrder: 99,
+          priority: 'normal',
+          targetFilament: 'Overture PETG Space Grey'
+        },
+        nextTimeSummary: 'Do NOT use Matte PLA (ball joints snap). PETG at 240°C snaps together cleanly without cracking.',
+        printLogs: [
+          {
+            logId: 'log_3',
+            date: '2026-11-16',
+            outcome: 'failed',
+            filamentUsed: 'Matte Charcoal PLA',
+            notes: 'Two socket ears cracked when snapping links together.',
+            forNextTime: 'Switch to PETG for flex on the ball-and-socket joints.'
+          },
+          {
+            logId: 'log_4',
+            date: '2026-11-17',
+            outcome: 'success',
+            filamentUsed: 'Overture PETG Space Grey',
+            notes: 'Zero cracking, holds 4 monitor cables under the standing desk.',
+            forNextTime: 'Scale to 110% if routing a thick power strip cord.'
+          }
+        ]
+      }
+    ];
+
+    let models = [];
+    let selectedModelId = null;
+    let currentTab = 'library';
+    let pendingParsedFile = null; // Stores info when user drops an actual STL/GCODE/3MF file
+
+    function loadModels() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        models = raw ? JSON.parse(raw) : JSON.parse(JSON.stringify(DEFAULT_MODELS));
+      } catch (e) {
+        models = JSON.parse(JSON.stringify(DEFAULT_MODELS));
+      }
+      if (!selectedModelId && models.length > 0) {
+        selectedModelId = models[0].id;
+      }
+    }
+
+    function saveModels() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(models));
+      } catch (e) {}
+      renderAll();
+    }
+
+    function resetDemoData() {
+      models = JSON.parse(JSON.stringify(DEFAULT_MODELS));
+      selectedModelId = models[0].id;
+      saveModels();
+    }
+
+    // =========================================================================
+    // 2. THREE.JS 3D VIEWPORT & BINARY/ASCII STL LOADER
+    // =========================================================================
+    let scene, camera, renderer, currentMesh;
+    let wireframeMode = false;
+    let autoRotate = true;
+    let isDragging = false;
+    let prevMouse = { x: 0, y: 0 };
+    let spherical = { theta: 0.65, phi: 1.05, radius: 170 };
+
+    function initThreeViewer() {
+      const canvas = document.getElementById('threeCanvas');
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x090d16);
+
+      camera = new THREE.PerspectiveCamera(40, canvas.clientWidth / canvas.clientHeight, 1, 2000);
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+      // Build plate grid
+      const grid = new THREE.GridHelper(200, 20, 0x38bdf8, 0x1e293b);
+      grid.position.y = -25;
+      scene.add(grid);
+
+      // Lights
+      const hemi = new THREE.HemisphereLight(0xe0f2fe, 0x0f172a, 0.9);
+      scene.add(hemi);
+
+      const dir1 = new THREE.DirectionalLight(0xffffff, 0.85);
+      dir1.position.set(120, 180, 130);
+      scene.add(dir1);
+
+      const dir2 = new THREE.DirectionalLight(0x38bdf8, 0.35);
+      dir2.position.set(-120, -60, -100);
+      scene.add(dir2);
+
+      // Orbit mouse events
+      canvas.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        prevMouse = { x: e.clientX, y: e.clientY };
+      });
+      window.addEventListener('mouseup', () => { isDragging = false; });
+      window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - prevMouse.x;
+        const dy = e.clientY - prevMouse.y;
+        prevMouse = { x: e.clientX, y: e.clientY };
+        spherical.theta -= dx * 0.01;
+        spherical.phi = Math.max(0.15, Math.min(Math.PI - 0.15, spherical.phi - dy * 0.01));
+        updateCameraPosition();
+      });
+      canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        spherical.radius = Math.max(50, Math.min(450, spherical.radius + e.deltaY * 0.12));
+        updateCameraPosition();
+      }, { passive: false });
+
+      window.addEventListener('resize', () => {
+        if (!canvas.clientWidth) return;
+        camera.aspect = canvas.clientWidth / canvas.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+      });
+
+      updateCameraPosition();
+      animateThree();
+    }
+
+    function updateCameraPosition() {
+      if (!camera) return;
+      camera.position.x = spherical.radius * Math.sin(spherical.phi) * Math.sin(spherical.theta);
+      camera.position.y = spherical.radius * Math.cos(spherical.phi);
+      camera.position.z = spherical.radius * Math.sin(spherical.phi) * Math.cos(spherical.theta);
+      camera.lookAt(0, 0, 0);
+    }
+
+    function animateThree() {
+      requestAnimationFrame(animateThree);
+      if (autoRotate && !isDragging && currentMesh) {
+        currentMesh.rotation.y += 0.0045;
+      }
+      if (renderer && scene && camera) {
+        renderer.render(scene, camera);
+      }
+    }
+
+    function toggleWireframe() {
+      wireframeMode = !wireframeMode;
+      if (currentMesh) {
+        currentMesh.traverse((child) => {
+          if (child.isMesh && child.material) {
+            child.material.wireframe = wireframeMode;
+          }
+        });
+      }
+    }
+
+    function toggleAutoRotate() {
+      autoRotate = !autoRotate;
+    }
+
+    function buildPresetMesh(preset) {
+      if (currentMesh) scene.remove(currentMesh);
+      const group = new THREE.Group();
+      const mat = new THREE.MeshStandardMaterial({
+        color: preset === 'flange' ? 0x10b981 : preset === 'gear' ? 0xf59e0b : 0x38bdf8,
+        roughness: 0.35,
+        metalness: 0.2,
+        wireframe: wireframeMode
+      });
+
+      if (preset === 'flange') {
+        // Custom Enclosure Pass-Through Gland
+        const base = new THREE.Mesh(new THREE.CylinderGeometry(32, 32, 8, 32), mat);
+        base.position.y = -15;
+        const shaft = new THREE.Mesh(new THREE.CylinderGeometry(16, 16, 36, 32), mat);
+        shaft.position.y = 4;
+        const hex = new THREE.Mesh(new THREE.CylinderGeometry(24, 24, 10, 6), mat);
+        hex.position.y = 0;
+        group.add(base, shaft, hex);
+      } else if (preset === 'gear') {
+        // Articulated spine / mechanical torus knot
+        const knot = new THREE.Mesh(new THREE.TorusKnotGeometry(24, 7.5, 100, 16), mat);
+        group.add(knot);
+      } else {
+        // Gridfinity 2x3 Tool Holder bin
+        const body = new THREE.Mesh(new THREE.BoxGeometry(64, 36, 92), mat);
+        body.position.y = -4;
+        const pocketMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8, wireframe: wireframeMode });
+        const slot1 = new THREE.Mesh(new THREE.BoxGeometry(22, 24, 34), pocketMat);
+        slot1.position.set(-14, 7, -20);
+        const slot2 = new THREE.Mesh(new THREE.BoxGeometry(22, 24, 34), pocketMat);
+        slot2.position.set(14, 7, -20);
+        const slot3 = new THREE.Mesh(new THREE.BoxGeometry(50, 24, 34), pocketMat);
+        slot3.position.set(0, 7, 22);
+        group.add(body, slot1, slot2, slot3);
+      }
+
+      currentMesh = group;
+      scene.add(currentMesh);
+    }
+
+    // Parse binary or ASCII STL ArrayBuffer directly in client browser
+    function parseStlBufferToGeometry(buffer) {
+      const view = new DataView(buffer);
+      // Check if binary STL matches expected byte length: 84 + numTriangles * 50
+      if (buffer.byteLength > 84) {
+        const numTriangles = view.getUint32(80, true);
+        const expectedBytes = 84 + numTriangles * 50;
+        if (expectedBytes === buffer.byteLength && numTriangles > 0) {
+          const positions = new Float32Array(numTriangles * 9);
+          let offset = 84;
+          for (let i = 0; i < numTriangles; i++) {
+            offset += 12; // skip normal vector
+            for (let v = 0; v < 9; v++) {
+              positions[i * 9 + v] = view.getFloat32(offset, true);
+              offset += 4;
+            }
+            offset += 2; // skip attribute byte count
+          }
+          const geom = new THREE.BufferGeometry();
+          geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+          geom.computeVertexNormals();
+          return geom;
+        }
+      }
+      // Fallback: ASCII STL parser
+      const text = new TextDecoder().decode(buffer);
+      const vertexRegex = /vertex\s+([\d.+\-eE]+)\s+([\d.+\-eE]+)\s+([\d.+\-eE]+)/g;
+      const verts = [];
+      let match;
+      while ((match = vertexRegex.exec(text)) !== null) {
+        verts.push(parseFloat(match[1]), parseFloat(match[2]), parseFloat(match[3]));
+      }
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+      geom.computeVertexNormals();
+      return geom;
+    }
+
+    function loadCustomStlGeometry(geometry, title) {
+      if (currentMesh) scene.remove(currentMesh);
+      geometry.computeBoundingBox();
+      const box = geometry.boundingBox;
+      const size = new THREE.Vector3();
+      box.getSize(size);
+
+      // Center geometry
+      geometry.center();
+
+      // Normalize scale to fit nicely in viewport
+      const maxDim = Math.max(size.x, size.y, size.z) || 1;
+      const scale = 75 / maxDim;
+
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0x38bdf8,
+        roughness: 0.35,
+        metalness: 0.15,
+        wireframe: wireframeMode
+      });
+      const mesh = new THREE.Mesh(geometry, mat);
+      mesh.scale.set(scale, scale, scale);
+      // Convert Z-up CAD coordinates to Y-up viewer
+      mesh.rotation.x = -Math.PI / 2;
+
+      currentMesh = mesh;
+      scene.add(currentMesh);
+
+      const dimsStr = `${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ${size.z.toFixed(1)} mm`;
+      document.getElementById('viewerDimsOverlay').textContent = dimsStr;
+      document.getElementById('viewerTitle').textContent = title || 'Uploaded STL Preview';
+      return dimsStr;
+    }
+
+    // =========================================================================
+    // 3. CLIENT-SIDE FILE PARSERS (.STL, .GCODE, .3MF)
+    // =========================================================================
+    function setupDragAndDrop() {
+      const dz = document.getElementById('dropZone');
+      ['dragenter', 'dragover'].forEach((evt) => {
+        dz.addEventListener(evt, (e) => {
+          e.preventDefault();
+          dz.classList.add('drop-active');
+        });
+      });
+      ['dragleave', 'drop'].forEach((evt) => {
+        dz.addEventListener(evt, (e) => {
+          e.preventDefault();
+          dz.classList.remove('drop-active');
+        });
+      });
+      dz.addEventListener('drop', (e) => {
+        const files = e.dataTransfer?.files;
+        if (files && files.length > 0) processIngestedFile(files[0]);
+      });
+    }
+
+    function handleFileSelect(event) {
+      const files = event.target.files;
+      if (files && files.length > 0) processIngestedFile(files[0]);
+    }
+
+    async function processIngestedFile(file) {
+      const ext = file.name.split('.').pop().toLowerCase();
+      const baseTitle = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ');
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+
+      if (!document.getElementById('formTitle').value) {
+        document.getElementById('formTitle').value = baseTitle;
+      }
+
+      pendingParsedFile = {
+        fileName: file.name,
+        extension: ext,
+        role: ext === 'gcode' || ext === 'gco' ? 'sliced' : ext === '3mf' ? 'print_profile' : ext === 'f3d' || ext === 'step' ? 'cad_source' : 'printable',
+        sizeDisplay: sizeMB
+      };
+
+      const statusEl = document.getElementById('droppedFileStatus');
+      const badgeEl = document.getElementById('extractedBadge');
+
+      if (ext === 'stl') {
+        const buffer = await file.arrayBuffer();
+        const geom = parseStlBufferToGeometry(buffer);
+        const dimsStr = loadCustomStlGeometry(geom, file.name);
+        document.getElementById('formDims').value = dimsStr.replace(' mm', '');
+        statusEl.innerHTML = `<span class="text-emerald-400 font-semibold">✔ Loaded STL:</span> ${file.name} (${sizeMB}) — Measured bounding box: <code class="text-sky-300">${dimsStr}</code>`;
+        badgeEl.textContent = 'Auto-extracted from STL geometry';
+        badgeEl.className = 'text-[11px] text-emerald-400 font-semibold';
+      } else if (ext === 'gcode' || ext === 'gco') {
+        const text = await file.text();
+        const parsed = parseGcodeComments(text);
+        if (parsed.printTime) document.getElementById('formPrintTime').value = parsed.printTime;
+        if (parsed.weightGrams) document.getElementById('formWeight').value = parsed.weightGrams;
+        if (parsed.layerHeight) document.getElementById('formLayer').value = parsed.layerHeight;
+        if (parsed.material) document.getElementById('formMaterial').value = parsed.material;
+        statusEl.innerHTML = `<span class="text-emerald-400 font-semibold">✔ Parsed G-Code Headers:</span> ${file.name} (${sizeMB})`;
+        badgeEl.textContent = 'Auto-extracted from G-Code comments';
+        badgeEl.className = 'text-[11px] text-emerald-400 font-semibold';
+      } else if (ext === '3mf' && window.JSZip) {
+        try {
+          const zip = await JSZip.loadAsync(file);
+          const entries = Object.keys(zip.files);
+          // Look for slice info or metadata inside 3MF zip
+          let foundNote = `${entries.length} archive entries inside .3mf`;
+          const configEntry = entries.find((e) => e.endsWith('.config') || e.includes('slice_info'));
+          if (configEntry) {
+            const cfgText = await zip.files[configEntry].async('string');
+            const gParsed = parseGcodeComments(cfgText);
+            if (gParsed.layerHeight) document.getElementById('formLayer').value = gParsed.layerHeight;
+            if (gParsed.material) document.getElementById('formMaterial').value = gParsed.material;
+          }
+          statusEl.innerHTML = `<span class="text-emerald-400 font-semibold">✔ Inspected 3MF Project Archive:</span> ${file.name} (${foundNote})`;
+          badgeEl.textContent = 'Auto-inspected .3MF archive';
+          badgeEl.className = 'text-[11px] text-emerald-400 font-semibold';
+        } catch (err) {
+          statusEl.textContent = `Attached ${file.name} (${sizeMB})`;
+        }
+      } else {
+        statusEl.innerHTML = `<span class="text-sky-400 font-semibold">✔ Attached File:</span> ${file.name} (${sizeMB})`;
+      }
+    }
+
+    // Parse common PrusaSlicer / Bambu Studio / OrcaSlicer / Cura G-code header/footer lines
+    function parseGcodeComments(text) {
+      const result = { printTime: '', weightGrams: '', layerHeight: '', material: '' };
+      const lines = text.split(/\r?\n/);
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line.startsWith(';') && !line.includes('key=')) continue;
+
+        if (!result.printTime && /estimated printing time|;TIME:/i.test(line)) {
+          const m = line.match(/=\s*(.+)$/) || line.match(/;TIME:(\d+)/i);
+          if (m) {
+            if (/^\d+$/.test(m[1])) {
+              const mins = Math.round(parseInt(m[1], 10) / 60);
+              result.printTime = `${Math.floor(mins / 60)}h ${mins % 60}m`;
+            } else {
+              result.printTime = m[1].trim();
+            }
+          }
+        }
+        if (!result.weightGrams && /filament used \[g\]|total filament used \[g\]/i.test(line)) {
+          const m = line.match(/=\s*([\d.]+)/);
+          if (m) result.weightGrams = parseFloat(m[1]);
+        }
+        if (!result.layerHeight && /layer_height\s*=/i.test(line)) {
+          const m = line.match(/=\s*([\d.]+)/);
+          if (m) result.layerHeight = `${m[1]}mm`;
+        }
+        if (!result.material && /filament_type\s*=/i.test(line)) {
+          const m = line.match(/=\s*([A-Za-z0-9+\-_]+)/);
+          if (m) result.material = m[1];
+        }
+      }
+      return result;
+    }
+
+    // =========================================================================
+    // 4. UI RENDERING: LIBRARY, PRINT QUEUE WAITLIST & POST-PRINT LOGBOOK
+    // =========================================================================
+    function switchTab(tab) {
+      currentTab = tab;
+      ['library', 'queue', 'ingest', 'settings'].forEach((t) => {
+        document.getElementById(`view-${t}`).classList.toggle('hidden', t !== tab);
+        const btn = document.getElementById(`tab-${t}`);
+        if (t === tab) {
+          btn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 bg-sky-500 text-slate-950';
+        } else {
+          btn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 text-slate-300 hover:text-white';
+        }
+      });
+      renderAll();
+    }
+
+    function sourceBadgeHtml(sourceType, siteName) {
+      const map = {
+        personal: { label: '🛠️ Personal CAD', cls: 'bg-purple-500/15 text-purple-300 border-purple-500/30' },
+        makerworld: { label: '🟢 MakerWorld', cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
+        printables: { label: '🟠 Printables', cls: 'bg-orange-500/15 text-orange-300 border-orange-500/30' },
+        thingiverse: { label: '🔵 Thingiverse', cls: 'bg-sky-500/15 text-sky-300 border-sky-500/30' },
+        other: { label: `🌐 ${siteName || 'External'}`, cls: 'bg-slate-700 text-slate-300 border-slate-600' }
+      };
+      const item = map[sourceType] || map.other;
+      return `<span class="text-[11px] font-medium px-2 py-0.5 rounded-md border ${item.cls}">${item.label}</span>`;
+    }
+
+    function statusBadgeHtml(status) {
+      const map = {
+        queued: { label: '⏳ Queued', cls: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
+        printing: { label: '🖨️ Printing', cls: 'bg-sky-500/20 text-sky-300 border-sky-400/40' },
+        printed: { label: '✅ Printed', cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
+        archived: { label: '📦 Archived', cls: 'bg-slate-700/80 text-slate-300 border-slate-600' },
+        inbox: { label: '📥 Inbox (Needs File)', cls: 'bg-rose-500/15 text-rose-300 border-rose-500/30' }
+      };
+      const item = map[status] || map.archived;
+      return `<span class="text-[11px] font-medium px-2 py-0.5 rounded-md border ${item.cls}">${item.label}</span>`;
+    }
+
+    function selectModel(id) {
+      selectedModelId = id;
+      const m = models.find((x) => x.id === id);
+      if (m) {
+        buildPresetMesh(m.shapePreset || 'gridfinity');
+        document.getElementById('viewerTitle').textContent = m.title;
+        document.getElementById('viewerDimsOverlay').textContent = m.specs?.dimensionsDisplay || '—';
+      }
+      renderAll();
+    }
+
+    function toggleQueueStatus(id, event) {
+      if (event) event.stopPropagation();
+      const m = models.find((x) => x.id === id);
+      if (!m) return;
+      if (m.workflow.status === 'queued') {
+        m.workflow.status = 'archived';
+      } else {
+        m.workflow.status = 'queued';
+        const queuedCount = models.filter((x) => x.workflow.status === 'queued').length;
+        m.workflow.queueOrder = queuedCount;
+      }
+      saveModels();
+    }
+
+    function moveQueueOrder(id, delta) {
+      const queued = models
+        .filter((m) => m.workflow.status === 'queued' || m.workflow.status === 'printing')
+        .sort((a, b) => (a.workflow.queueOrder || 99) - (b.workflow.queueOrder || 99));
+      const idx = queued.findIndex((m) => m.id === id);
+      const swapIdx = idx + delta;
+      if (idx < 0 || swapIdx < 0 || swapIdx >= queued.length) return;
+      const temp = queued[idx].workflow.queueOrder;
+      queued[idx].workflow.queueOrder = queued[swapIdx].workflow.queueOrder;
+      queued[swapIdx].workflow.queueOrder = temp;
+      saveModels();
+    }
+
+    function setWorkflowStatus(id, newStatus) {
+      const m = models.find((x) => x.id === id);
+      if (!m) return;
+      m.workflow.status = newStatus;
+      saveModels();
+    }
+
+    function addPrintLog(id) {
+      const m = models.find((x) => x.id === id);
+      if (!m) return;
+      const outcome = document.getElementById('logOutcome').value;
+      const filamentUsed = document.getElementById('logFilament').value.trim() || m.workflow.targetFilament || 'PLA / PETG';
+      const notes = document.getElementById('logNotes').value.trim();
+      const forNextTime = document.getElementById('logNextTime').value.trim();
+
+      if (!notes && !forNextTime) return;
+
+      const today = new Date().toISOString().slice(0, 10);
+      m.printLogs.unshift({
+        logId: 'log_' + Date.now(),
+        date: today,
+        outcome,
+        filamentUsed,
+        notes: notes || 'Print logged.',
+        forNextTime
+      });
+
+      // Automatically promote the latest "forNextTime" note to the pinned summary banner
+      if (forNextTime) {
+        m.nextTimeSummary = forNextTime;
+      }
+      if (outcome === 'success') {
+        m.workflow.status = 'printed';
+      }
+      saveModels();
+    }
+
+    function updatePinnedNextTime(id) {
+      const m = models.find((x) => x.id === id);
+      if (!m) return;
+      const val = document.getElementById('pinnedNextTimeInput').value.trim();
+      m.nextTimeSummary = val;
+      saveModels();
+    }
+
+    function renderAll() {
+      const queuedModels = models
+        .filter((m) => m.workflow.status === 'queued' || m.workflow.status === 'printing')
+        .sort((a, b) => (a.workflow.queueOrder || 99) - (b.workflow.queueOrder || 99));
+
+      document.getElementById('count-library').textContent = models.length;
+      document.getElementById('count-queue').textContent = queuedModels.length;
+
+      renderLibraryGrid();
+      renderQueueList(queuedModels);
+      renderInspector();
+    }
+
+    function renderLibraryGrid() {
+      const q = (document.getElementById('searchInput')?.value || '').toLowerCase().trim();
+      const srcFilter = document.getElementById('filterSource')?.value || 'all';
+      const stFilter = document.getElementById('filterStatus')?.value || 'all';
+
+      const filtered = models.filter((m) => {
+        if (srcFilter !== 'all' && m.sourceType !== srcFilter) return false;
+        if (stFilter !== 'all' && m.workflow.status !== stFilter) return false;
+        if (!q) return true;
+        const hay = [
+          m.title,
+          m.category,
+          ...(m.tags || []),
+          m.source?.author,
+          m.source?.cadTool,
+          m.nextTimeSummary,
+          m.workflow?.targetFilament
+        ].join(' ').toLowerCase();
+        return hay.includes(q);
+      });
+
+      const grid = document.getElementById('libraryGrid');
+      if (filtered.length === 0) {
+        grid.innerHTML = `
+          <div class="col-span-2 bg-slate-800/50 border border-slate-700/70 rounded-xl p-8 text-center text-xs text-slate-400">
+            No models match your current filter. Click <strong>➕ Add / Drop Files</strong> to add a new 3D model.
+          </div>`;
+        return;
+      }
+
+      grid.innerHTML = filtered.map((m) => {
+        const isSelected = m.id === selectedModelId;
+        const isQueued = m.workflow.status === 'queued';
+        return `
+          <div
+            onclick="selectModel('${m.id}')"
+            class="rounded-xl p-4 border transition cursor-pointer flex flex-col justify-between gap-3 ${
+              isSelected
+                ? 'bg-slate-800 border-sky-400 shadow-lg shadow-sky-950/50'
+                : 'bg-slate-800/60 border-slate-700/80 hover:border-slate-500'
+            }"
+          >
+            <div class="space-y-2">
+              <div class="flex items-center justify-between gap-2 flex-wrap">
+                ${sourceBadgeHtml(m.sourceType, m.source?.siteName)}
+                ${statusBadgeHtml(m.workflow.status)}
+              </div>
+
+              <h3 class="text-sm font-bold text-white leading-snug">${m.title}</h3>
+
+              <!-- Provenance difference: Personal CAD vs Scraped Repo -->
+              <div class="text-[11px] text-slate-400">
+                ${
+                  m.source?.isPersonalDesign
+                    ? `<span>🛠️ CAD: <strong class="text-slate-200">${m.source.cadTool || 'Custom'}</strong> (${m.source.designVersion || 'v1.0'})</span>`
+                    : `<span>👤 By <strong class="text-slate-200">${m.source?.author || 'Unknown'}</strong> • ${m.source?.license || 'CC'}</span>`
+                }
+              </div>
+
+              <!-- Technical Specs Pill Row -->
+              <div class="flex flex-wrap items-center gap-2 text-[11px] font-mono text-slate-300 pt-1">
+                <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-700">⏱️ ${m.specs?.estimatedPrintTimeDisplay || '—'}</span>
+                <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-700">⚖️ ${m.specs?.filamentWeightGrams || '—'}g</span>
+                <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-700">🧵 ${m.specs?.recommendedMaterial || 'PLA'}</span>
+              </div>
+
+              <!-- Pinned "For Next Time" Note Preview -->
+              ${
+                m.nextTimeSummary
+                  ? `<div class="mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-200">
+                      <strong class="text-amber-300">📌 Next Time:</strong> ${m.nextTimeSummary}
+                    </div>`
+                  : ''
+              }
+            </div>
+
+            <div class="pt-2 border-t border-slate-700/70 flex items-center justify-between gap-2">
+              <div class="flex flex-wrap gap-1">
+                ${(m.files || []).map((f) => `<span class="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-slate-900 text-sky-300 border border-slate-700">.${f.extension}</span>`).join('')}
+              </div>
+              <button
+                onclick="toggleQueueStatus('${m.id}', event)"
+                class="px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
+                  isQueued
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30'
+                    : 'bg-slate-700 hover:bg-sky-500 hover:text-slate-950 text-slate-200'
+                }"
+              >
+                ${isQueued ? '✓ In Queue' : '+ Queue Print'}
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderQueueList(queuedModels) {
+      const totalMins = queuedModels.reduce((acc, m) => acc + (m.specs?.estimatedPrintTimeMinutes || 90), 0);
+      const totalGrams = queuedModels.reduce((acc, m) => acc + (Number(m.specs?.filamentWeightGrams) || 0), 0);
+      document.getElementById('queueTotals').textContent =
+        `${queuedModels.length} queued • ${Math.floor(totalMins / 60)}h ${totalMins % 60}m est • ${totalGrams.toFixed(1)}g filament`;
+
+      const listEl = document.getElementById('queueList');
+      if (queuedModels.length === 0) {
+        listEl.innerHTML = `
+          <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-8 text-center text-xs text-slate-400">
+            Your Print Queue is empty. Flag any model in your Library with <strong>+ Queue Print</strong> to build your project waitlist.
+          </div>`;
+        return;
+      }
+
+      listEl.innerHTML = queuedModels.map((m, idx) => `
+        <div
+          onclick="selectModel('${m.id}')"
+          class="bg-slate-800/80 border ${m.id === selectedModelId ? 'border-sky-400' : 'border-slate-700'} rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 cursor-pointer hover:border-slate-500 transition"
+        >
+          <div class="flex items-start gap-3.5">
+            <div class="flex flex-col items-center gap-1">
+              <span class="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold text-xs flex items-center justify-center">
+                #${idx + 1}
+              </span>
+              <div class="flex flex-col gap-0.5">
+                <button onclick="event.stopPropagation(); moveQueueOrder('${m.id}', -1)" class="text-[10px] px-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-200">▲</button>
+                <button onclick="event.stopPropagation(); moveQueueOrder('${m.id}', 1)" class="text-[10px] px-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-200">▼</button>
+              </div>
+            </div>
+            <div class="space-y-1.5">
+              <div class="flex items-center gap-2 flex-wrap">
+                <h3 class="text-sm font-bold text-white">${m.title}</h3>
+                ${sourceBadgeHtml(m.sourceType, m.source?.siteName)}
+                ${statusBadgeHtml(m.workflow.status)}
+              </div>
+              <div class="text-xs text-slate-300 flex flex-wrap items-center gap-3 font-mono">
+                <span>⏱️ ${m.specs?.estimatedPrintTimeDisplay || '—'}</span>
+                <span>⚖️ ${m.specs?.filamentWeightGrams || '—'}g</span>
+                <span>🎯 Target: <strong class="text-sky-300 font-sans">${m.workflow?.targetFilament || m.specs?.recommendedMaterial || 'Default'}</strong></span>
+              </div>
+              ${
+                m.nextTimeSummary
+                  ? `<div class="p-2 rounded-lg bg-amber-500/15 border border-amber-500/30 text-xs text-amber-200">
+                      <strong class="text-amber-300">📌 Check Before Slicing:</strong> ${m.nextTimeSummary}
+                    </div>`
+                  : ''
+              }
+            </div>
+          </div>
+
+          <div class="flex sm:flex-col items-center sm:items-end gap-2 w-full sm:w-auto justify-end">
+            <button
+              onclick="event.stopPropagation(); setWorkflowStatus('${m.id}', 'printing')"
+              class="px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs"
+            >
+              🖨️ Start Print
+            </button>
+            <button
+              onclick="event.stopPropagation(); setWorkflowStatus('${m.id}', 'printed')"
+              class="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 font-semibold text-xs"
+            >
+              ✅ Mark Printed
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderInspector() {
+      const m = models.find((x) => x.id === selectedModelId) || models[0];
+      const el = document.getElementById('inspectorCard');
+      if (!m) {
+        el.innerHTML = `<div class="text-xs text-slate-400">Select a model to inspect metadata and post-print notes.</div>`;
+        return;
+      }
+
+      el.innerHTML = `
+        <div class="space-y-3">
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <div class="flex items-center gap-1.5 flex-wrap mb-1">
+                ${sourceBadgeHtml(m.sourceType, m.source?.siteName)}
+                ${statusBadgeHtml(m.workflow.status)}
+              </div>
+              <h2 class="text-sm font-bold text-white">${m.title}</h2>
+            </div>
+          </div>
+
+          <!-- Origin / Provenance Metadata Block -->
+          <div class="bg-slate-900/80 border border-slate-700/80 rounded-lg p-3 text-xs space-y-1.5">
+            <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              ${m.source?.isPersonalDesign ? '🛠️ Personal Upload Metadata' : '🌐 External Repository Metadata'}
+            </div>
+            ${
+              m.source?.isPersonalDesign
+                ? `<div class="grid grid-cols-2 gap-2 text-slate-300">
+                    <div>CAD Tool: <strong class="text-white">${m.source.cadTool || 'Custom'}</strong></div>
+                    <div>Revision: <strong class="text-white font-mono">${m.source.designVersion || 'v1.0'}</strong></div>
+                  </div>`
+                : `<div class="space-y-1 text-slate-300">
+                    <div>Author: <strong class="text-white">${m.source?.author || '—'}</strong> • License: <span class="text-slate-200">${m.source?.license || '—'}</span></div>
+                    ${
+                      m.source?.url
+                        ? `<div>Source Link: <a href="${m.source.url}" target="_blank" class="text-sky-400 hover:underline break-all">${m.source.url}</a></div>`
+                        : ''
+                    }
+                  </div>`
+            }
+          </div>
+
+          <!-- Pinned "For Next Time" Banner (Editable) -->
+          <div class="bg-amber-500/10 border border-amber-500/35 rounded-lg p-3 space-y-1.5">
+            <label class="block text-xs font-bold text-amber-300">
+              📌 Pinned "For Next Time" Note (Shows in Print Queue)
+            </label>
+            <div class="flex gap-1.5">
+              <input
+                id="pinnedNextTimeInput"
+                type="text"
+                value="${(m.nextTimeSummary || '').replace(/"/g, '&quot;')}"
+                placeholder="Slicer scaling, supports, hole compensation..."
+                class="flex-1 bg-slate-950/90 border border-amber-500/40 rounded px-2.5 py-1 text-xs text-amber-100"
+              />
+              <button
+                onclick="updatePinnedNextTime('${m.id}')"
+                class="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+
+          <!-- Post-Print Notes & Print Logbook -->
+          <div class="border-t border-slate-700 pt-3 space-y-2.5">
+            <h3 class="text-xs font-bold text-white flex items-center justify-between">
+              <span>📝 Post-Print Notes & Attempt History</span>
+              <span class="text-[11px] font-normal text-slate-400">${(m.printLogs || []).length} entries</span>
+            </h3>
+
+            <!-- Quick Add Print Log Form -->
+            <div class="bg-slate-900/90 border border-slate-700 rounded-lg p-2.5 space-y-2">
+              <div class="grid grid-cols-2 gap-2">
+                <select id="logOutcome" class="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white">
+                  <option value="success">✅ Printed Great</option>
+                  <option value="needs_tweaks">⚠️ Needs Tweaks</option>
+                  <option value="failed">❌ Failed Print</option>
+                </select>
+                <input id="logFilament" type="text" placeholder="Filament used (e.g. PETG)" class="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white" />
+              </div>
+              <input id="logNotes" type="text" placeholder="How did the print turn out? (Fitment, surface quality...)" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-xs text-white" />
+              <div class="flex gap-1.5">
+                <input id="logNextTime" type="text" placeholder="Reminder for NEXT time (updates pinned banner)..." class="flex-1 bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-xs text-amber-200" />
+                <button onclick="addPrintLog('${m.id}')" class="px-3 py-1 rounded bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs whitespace-nowrap">
+                  + Log Print
+                </button>
+              </div>
+            </div>
+
+            <!-- Historical Logs List -->
+            <div class="space-y-2 max-h-56 overflow-y-auto pr-1">
+              ${(m.printLogs || []).map((log) => {
+                const badge =
+                  log.outcome === 'success'
+                    ? '<span class="text-emerald-400 font-semibold">✅ Success</span>'
+                    : log.outcome === 'failed'
+                    ? '<span class="text-rose-400 font-semibold">❌ Failed</span>'
+                    : '<span class="text-amber-300 font-semibold">⚠️ Needs Tweaks</span>';
+                return `
+                  <div class="bg-slate-900/60 border border-slate-700/80 rounded-lg p-2.5 text-xs space-y-1">
+                    <div class="flex items-center justify-between text-[11px] text-slate-400">
+                      <div>${badge} • <span class="text-slate-200">${log.filamentUsed || 'Filament'}</span></div>
+                      <span class="font-mono">${log.date}</span>
+                    </div>
+                    <p class="text-slate-200">${log.notes}</p>
+                    ${
+                      log.forNextTime
+                        ? `<p class="text-amber-300 text-[11px]"><strong>↳ Next Time:</strong> ${log.forNextTime}</p>`
+                        : ''
+                    }
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // 5. FORM INGESTION HELPERS
+    // =========================================================================
+    function toggleSourceFields() {
+      const st = document.getElementById('formSourceType').value;
+      const isPersonal = st === 'personal';
+      document.getElementById('personalSourceGroup').classList.toggle('hidden', !isPersonal);
+      document.getElementById('externalSourceGroup').classList.toggle('hidden', isPersonal);
+    }
+
+    function autoDetectSourceFromUrl() {
+      const url = document.getElementById('formUrl').value.toLowerCase();
+      const sel = document.getElementById('formSourceType');
+      if (url.includes('makerworld.com')) sel.value = 'makerworld';
+      else if (url.includes('printables.com')) sel.value = 'printables';
+      else if (url.includes('thingiverse.com')) sel.value = 'thingiverse';
+    }
+
+    function saveNewModel() {
+      const title = document.getElementById('formTitle').value.trim() || 'Untitled 3D Model';
+      const sourceType = document.getElementById('formSourceType').value;
+      const isPersonal = sourceType === 'personal';
+      const dims = document.getElementById('formDims').value.trim() || '100 × 100 × 50';
+      const printTime = document.getElementById('formPrintTime').value.trim() || '1h 30m';
+      const weight = parseFloat(document.getElementById('formWeight').value) || 40.0;
+      const material = document.getElementById('formMaterial').value.trim() || 'PLA / PETG';
+      const layer = document.getElementById('formLayer').value.trim() || '0.20mm';
+      const status = document.getElementById('formStatus').value;
+      const nextTime = document.getElementById('formNextTime').value.trim();
+
+      const newModel = {
+        id: 'm_' + Math.random().toString(36).slice(2, 8),
+        title,
+        sourceType,
+        category: document.getElementById('formCategory').value.trim() || 'General',
+        tags: document.getElementById('formTags').value.split(',').map((t) => t.trim()).filter(Boolean),
+        shapePreset: isPersonal ? 'flange' : 'gridfinity',
+        createdAt: new Date().toISOString(),
+        source: {
+          isPersonalDesign: isPersonal,
+          siteName: isPersonal ? 'Personal CAD' : sourceType,
+          url: document.getElementById('formUrl').value.trim(),
+          author: isPersonal ? 'Keith' : (document.getElementById('formAuthor').value.trim() || 'Community Designer'),
+          license: isPersonal ? 'Personal' : (document.getElementById('formLicense').value.trim() || 'CC BY-NC'),
+          cadTool: isPersonal ? (document.getElementById('formCadTool').value.trim() || 'Fusion 360') : null,
+          designVersion: isPersonal ? (document.getElementById('formVersion').value.trim() || 'v1.0') : null
+        },
+        files: pendingParsedFile
+          ? [pendingParsedFile]
+          : [{ fileName: title.toLowerCase().replace(/\s+/g, '_') + '.stl', extension: 'stl', role: 'printable', sizeDisplay: '1.4 MB' }],
+        specs: {
+          dimensionsDisplay: dims.includes('mm') ? dims : `${dims} mm`,
+          estimatedPrintTimeDisplay: printTime,
+          estimatedPrintTimeMinutes: 90,
+          filamentWeightGrams: weight,
+          recommendedMaterial: material,
+          layerHeightMm: layer
+        },
+        workflow: {
+          status,
+          queueOrder: models.filter((x) => x.workflow.status === 'queued').length + 1,
+          priority: 'normal',
+          targetFilament: document.getElementById('formTargetFilament').value.trim() || material
+        },
+        nextTimeSummary: nextTime,
+        printLogs: []
+      };
+
+      models.unshift(newModel);
+      selectedModelId = newModel.id;
+      pendingParsedFile = null;
+      saveModels();
+      switchTab(status === 'queued' ? 'queue' : 'library');
+    }
+
+    function exportVaultJson() {
+      const blob = new Blob([JSON.stringify({ models }, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = '3d-model-vault-backup.json';
+      a.click();
+    }
+
+    function saveCloudConfig() {
+      const fb = document.getElementById('cfgFirebaseUrl').value.trim();
+      const badge = document.getElementById('syncBadge');
+      if (fb) {
+        badge.textContent = 'Firebase Cloud Configured';
+        badge.className = 'text-[11px] font-medium px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/40';
+      }
+      switchTab('library');
+    }
+
+    // Boot
+    window.addEventListener('DOMContentLoaded', () => {
+      loadModels();
+      initThreeViewer();
+      setupDragAndDrop();
+      selectModel(selectedModelId);
+    });
+  </script>
+</body>
+</html>
