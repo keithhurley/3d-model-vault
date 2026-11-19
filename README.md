@@ -26,3 +26,7 @@ Serverless 3D Model Storage and Ingestion System (Google Antigravity Blueprint)
 ## 3. Distribution & Sharing Model
 - **Frontend Distribution:** Static single-file app distributed via GitHub repository / GitHub Pages (one-click access).
 - **Backend Setup for External Users:** Each user deploys their own copy of the Google Apps Script backend, configures their own Firebase free-tier project, and authorizes access to their personal Google Drive via a setup guide.
+
+## 4. Detailed Architecture & Metadata Schema
+See [docs/architecture-and-metadata.md](docs/architecture-and-metadata.md) for the full ingestion workflow diagrams, Google Drive folder layout, unified Firebase JSON schema, and Print Queue state machine.
+
