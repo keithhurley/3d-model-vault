@@ -16,6 +16,8 @@ Serverless 3D Model Storage and Ingestion System (Google Antigravity Blueprint)
 ### Frontend UI
 - Single-file web application (`HTML`/`CSS`/`JS`) using **Three.js** for client-side 3D model previews.
 - Hosted for free on **GitHub Pages** or run locally from desktop, communicating directly with the Google Apps Script API and Firebase.
+- **Print Queue / Waitlist:** Flag models into a prioritized print queue (`archived` → `queued` → `printing` → `printed`) so the app serves as an active project waitlist, not just a static repository.
+- **Post-Print Notes & Print Logs:** Record timestamped comments, slicer/filament tweaks, outcomes, and *"for next time"* reminders after each print.
 
 ## 2. Technical Constraints & Reliability
 - **Upload Limits & Quotas:** Standard Google Drive 750 GB daily upload cap; standard Apps Script execution and URL Fetch quotas are sufficient for personal ingestion volumes.
