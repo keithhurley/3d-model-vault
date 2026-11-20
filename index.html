@@ -272,8 +272,15 @@
             <input id="formTitle" type="text" oninput="autoSuggestCategoryFromTitle()" placeholder="Gridfinity Pliers Holder" class="vault-input w-full px-3 py-2 text-xs" />
           </div>
           <div>
-            <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Category</label>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-xs font-medium" style="color: var(--muted);">Category</label>
+              <button type="button" onclick="toggleQuickAddCategory('ingest')" class="text-[11px] font-medium hover:underline" style="color: var(--accent);">+ Custom</button>
+            </div>
             <select id="formCategory" class="vault-input w-full px-3 py-2 text-xs"></select>
+            <div id="ingestQuickCategoryBox" class="hidden flex items-center gap-1.5 mt-1.5">
+              <input id="ingestQuickCategoryInput" type="text" placeholder="New category name..." class="vault-input flex-1 px-2.5 py-1 text-xs" onkeydown="if(event.key==='Enter'){event.preventDefault();createQuickCategory('ingest');}" />
+              <button type="button" onclick="createQuickCategory('ingest')" class="vault-btn-primary px-2.5 py-1 text-[11px]">Add</button>
+            </div>
           </div>
           <div>
             <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Source</label>
@@ -455,6 +462,37 @@
         </div>
         <div id="importStatusMsg" class="text-xs hidden" style="color: var(--accent);"></div>
       </div>
+
+      <div class="vault-card p-6 space-y-4">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <div>
+            <h2 class="text-sm font-bold">Customize Archive Categories</h2>
+            <p class="text-xs mt-0.5" style="color: var(--muted);">
+              Add, rename, reorder, or remove categories. Renaming a category automatically updates all models assigned to it.
+            </p>
+          </div>
+          <button onclick="resetCategoriesToDefault()" class="vault-btn-ghost px-3 py-1 text-[11px]">
+            Reset Defaults
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <input
+            id="newCategoryNameInput"
+            type="text"
+            placeholder="Add new category (e.g. Board Games, Automotive, Gifts)..."
+            class="vault-input flex-1 px-3 py-2 text-xs"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomCategoryFromSetup();}"
+          />
+          <button onclick="addCustomCategoryFromSetup()" class="vault-btn-primary px-4 py-2 text-xs shrink-0">
+            + Add Category
+          </button>
+        </div>
+
+        <div id="categoryManagerStatus" class="hidden text-xs" style="color: var(--accent);"></div>
+
+        <div id="categoryManagerList" class="space-y-2"></div>
+      </div>
     </section>
 
   </main>
@@ -500,8 +538,9 @@
 
     const STORAGE_KEY = '3d_model_vault_v2';
     const THEME_KEY = '3d_model_vault_theme';
+    const CATEGORIES_KEY = '3d_model_vault_categories';
 
-    const VAULT_CATEGORIES = [
+    const DEFAULT_CATEGORIES = [
       'Organizers & Gridfinity',
       'Workshop & Tools',
       'Printer Mods & Enclosures',
@@ -512,15 +551,45 @@
       'Uncategorized'
     ];
 
+    let vaultCategories = [...DEFAULT_CATEGORIES];
+
+    function ensureUncategorizedLast(list) {
+      const cleaned = [];
+      const seen = new Set();
+      (list || []).forEach((item) => {
+        const name = String(item || '').trim();
+        if (!name || name.toLowerCase() === 'uncategorized') return;
+        const lower = name.toLowerCase();
+        if (!seen.has(lower)) {
+          seen.add(lower);
+          cleaned.push(name);
+        }
+      });
+      cleaned.push('Uncategorized');
+      return cleaned;
+    }
+
     function inferCategoryFromText(text) {
       const t = (text || '').toLowerCase();
-      if (/gridfinity|bin|organizer|tray|drawer|holder|rack|storage|box/.test(t)) return 'Organizers & Gridfinity';
-      if (/enclosure|ptfe|extruder|nozzle|bambu|prusa|voron|spool|filament|fan duct|bed/.test(t)) return 'Printer Mods & Enclosures';
-      if (/pliers|cutter|wrench|clamp|jig|caliper|screwdriver|vise|tool|drill/.test(t)) return 'Workshop & Tools';
-      if (/cable|desk|hook|clip|mount|stand|shelf|coaster|kitchen|bath/.test(t)) return 'Household & Desk';
-      if (/esp32|arduino|pi|raspberry|sensor|case|led|usb|battery|switch/.test(t)) return 'Electronics & Mounts';
-      if (/gear|flange|bushing|bearing|bracket|adapter|hinge|knob|bolt|nut|gland/.test(t)) return 'Mechanical & Replacement Parts';
-      if (/mini|figurine|statue|art|toy|vase|planter|ornament|sculpt/.test(t)) return 'Miniatures & Decor';
+      // 1. Direct match against any custom or built-in category words (3+ chars)
+      for (const cat of vaultCategories) {
+        if (cat === 'Uncategorized') continue;
+        const tokens = cat.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3);
+        if (tokens.some((tok) => t.includes(tok))) return cat;
+      }
+      // 2. Built-in keyword heuristics if matching category exists in vaultCategories
+      const rules = [
+        { re: /gridfinity|bin|organizer|tray|drawer|holder|rack|storage|box/, match: 'Organizers & Gridfinity' },
+        { re: /enclosure|ptfe|extruder|nozzle|bambu|prusa|voron|spool|filament|fan duct|bed/, match: 'Printer Mods & Enclosures' },
+        { re: /pliers|cutter|wrench|clamp|jig|caliper|screwdriver|vise|tool|drill/, match: 'Workshop & Tools' },
+        { re: /cable|desk|hook|clip|mount|stand|shelf|coaster|kitchen|bath/, match: 'Household & Desk' },
+        { re: /esp32|arduino|pi|raspberry|sensor|case|led|usb|battery|switch/, match: 'Electronics & Mounts' },
+        { re: /gear|flange|bushing|bearing|bracket|adapter|hinge|knob|bolt|nut|gland/, match: 'Mechanical & Replacement Parts' },
+        { re: /mini|figurine|statue|art|toy|vase|planter|ornament|sculpt/, match: 'Miniatures & Decor' }
+      ];
+      for (const r of rules) {
+        if (r.re.test(t) && vaultCategories.includes(r.match)) return r.match;
+      }
       return 'Uncategorized';
     }
 
@@ -790,12 +859,61 @@
       }
     }
 
+    function mergeModelCategoriesIntoList() {
+      let changed = false;
+      const existingLower = new Set(vaultCategories.map((c) => c.toLowerCase()));
+      models.forEach((m) => {
+        const cat = (m.category || '').trim();
+        if (cat && cat.toLowerCase() !== 'inbox' && !existingLower.has(cat.toLowerCase())) {
+          vaultCategories.splice(Math.max(0, vaultCategories.length - 1), 0, cat);
+          existingLower.add(cat.toLowerCase());
+          changed = true;
+        }
+      });
+      vaultCategories = ensureUncategorizedLast(vaultCategories);
+      if (changed) {
+        try { localStorage.setItem(CATEGORIES_KEY, JSON.stringify(vaultCategories)); } catch (e) {}
+      }
+    }
+
+    function saveCategories(syncCloud = true) {
+      vaultCategories = ensureUncategorizedLast(vaultCategories);
+      try {
+        localStorage.setItem(CATEGORIES_KEY, JSON.stringify(vaultCategories));
+      } catch (e) {}
+      if (syncCloud) syncCategoriesToFirebase();
+      renderAll();
+      if (activeDrawerModelId) renderDrawerContent(activeDrawerModelId);
+    }
+
+    async function syncCategoriesToFirebase() {
+      if (!cloudConfig.firebaseUrl) return;
+      try {
+        const base = cloudConfig.firebaseUrl.replace(/\/+$/, '');
+        await fetch(`${base}/categories.json`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(vaultCategories)
+        });
+      } catch (e) {
+        console.warn('Firebase categories sync failed:', e);
+      }
+    }
+
     function loadState() {
       loadConfig();
       try {
         setTheme(localStorage.getItem(THEME_KEY) || 'workshop');
+        const rawCats = localStorage.getItem(CATEGORIES_KEY);
+        if (rawCats) {
+          const parsedCats = JSON.parse(rawCats);
+          if (Array.isArray(parsedCats) && parsedCats.length > 0) {
+            vaultCategories = ensureUncategorizedLast(parsedCats);
+          }
+        }
         const raw = localStorage.getItem(STORAGE_KEY);
         models = raw ? JSON.parse(raw) : JSON.parse(JSON.stringify(DEFAULT_MODELS));
+        mergeModelCategoriesIntoList();
       } catch (e) {
         models = JSON.parse(JSON.stringify(DEFAULT_MODELS));
       }
@@ -811,6 +929,7 @@
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(models.map(serializeModel)));
       } catch (e) {}
+      mergeModelCategoriesIntoList();
       renderAll();
       if (activeDrawerModelId) renderDrawerContent(activeDrawerModelId);
     }
@@ -819,6 +938,16 @@
       if (!cloudConfig.firebaseUrl) return;
       try {
         const base = cloudConfig.firebaseUrl.replace(/\/+$/, '');
+        try {
+          const catRes = await fetch(`${base}/categories.json`);
+          if (catRes.ok) {
+            const catData = await catRes.json();
+            if (Array.isArray(catData) && catData.length > 0) {
+              vaultCategories = ensureUncategorizedLast(catData);
+              try { localStorage.setItem(CATEGORIES_KEY, JSON.stringify(vaultCategories)); } catch (e) {}
+            }
+          }
+        } catch (e) {}
         const res = await fetch(`${base}/models.json`);
         if (!res.ok) return;
         const data = await res.json();
@@ -1124,12 +1253,16 @@
       if (filterEl) {
         const currentVal = filterEl.value || 'all';
         filterEl.innerHTML = `<option value="all">All Categories</option>` +
-          VAULT_CATEGORIES.map((c) => `<option value="${c}">${c}</option>`).join('');
-        filterEl.value = currentVal;
+          vaultCategories.map((c) => `<option value="${c.replace(/"/g, '&quot;')}">${c}</option>`).join('');
+        filterEl.value = vaultCategories.includes(currentVal) ? currentVal : 'all';
       }
       const formEl = document.getElementById('formCategory');
-      if (formEl && !formEl.options.length) {
-        formEl.innerHTML = VAULT_CATEGORIES.map((c) => `<option value="${c}">${c}</option>`).join('');
+      if (formEl) {
+        const currentFormVal = formEl.value;
+        formEl.innerHTML = vaultCategories.map((c) => `<option value="${c.replace(/"/g, '&quot;')}">${c}</option>`).join('');
+        if (currentFormVal && vaultCategories.includes(currentFormVal)) {
+          formEl.value = currentFormVal;
+        }
       }
     }
 
@@ -1231,6 +1364,7 @@
       renderQueueList(queuedModels);
       renderSourcesDirectory();
       renderQaView();
+      renderCategoryManager();
     }
 
     function renderLibraryGrid() {
@@ -1486,10 +1620,17 @@
               <input id="editTitleInput" type="text" value="${m.title.replace(/"/g, '&quot;')}" class="vault-input w-full px-2.5 py-1.5 text-xs" />
             </div>
             <div>
-              <label class="block text-[11px] mb-1" style="color: var(--muted);">Category</label>
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-[11px]" style="color: var(--muted);">Category</label>
+                <button type="button" onclick="toggleQuickAddCategory('drawer')" class="text-[10px] font-medium hover:underline" style="color: var(--accent);">+ Custom</button>
+              </div>
               <select id="editCategoryInput" class="vault-input w-full px-2.5 py-1.5 text-xs">
-                ${VAULT_CATEGORIES.map((c) => `<option value="${c}" ${(m.category || 'Uncategorized') === c ? 'selected' : ''}>${c}</option>`).join('')}
+                ${vaultCategories.map((c) => `<option value="${c.replace(/"/g, '&quot;')}" ${(m.category || 'Uncategorized') === c ? 'selected' : ''}>${c}</option>`).join('')}
               </select>
+              <div id="drawerQuickCategoryBox" class="hidden flex items-center gap-1 mt-1.5">
+                <input id="drawerQuickCategoryInput" type="text" placeholder="New category..." class="vault-input flex-1 px-2 py-1 text-xs" onkeydown="if(event.key==='Enter'){event.preventDefault();createQuickCategory('drawer');}" />
+                <button type="button" onclick="createQuickCategory('drawer')" class="vault-btn-primary px-2 py-1 text-[10px]">Add</button>
+              </div>
             </div>
             <div>
               <label class="block text-[11px] mb-1" style="color: var(--muted);">Material Type</label>
@@ -3042,11 +3183,11 @@
                       </div>
                       <div class="flex items-center gap-2 shrink-0">
                         <select onchange="saveQaCategory('${m.id}', this.value)" class="vault-input px-2.5 py-1 text-xs">
-                          ${VAULT_CATEGORIES.map((c) => `<option value="${c}" ${(m.category || 'Uncategorized') === c ? 'selected' : ''}>${c}</option>`).join('')}
+                          ${vaultCategories.map((c) => `<option value="${c.replace(/"/g, '&quot;')}" ${(m.category || 'Uncategorized') === c ? 'selected' : ''}>${c}</option>`).join('')}
                         </select>
                         ${
                           suggested !== 'Uncategorized'
-                            ? `<button onclick="saveQaCategory('${m.id}', '${suggested}')" class="vault-btn-primary px-2.5 py-1 text-[11px]">Apply Suggested</button>`
+                            ? `<button onclick="saveQaCategory('${m.id}', '${suggested.replace(/'/g, "\\'")}')" class="vault-btn-primary px-2.5 py-1 text-[11px]">Apply Suggested</button>`
                             : ''
                         }
                       </div>
@@ -3058,6 +3199,184 @@
       `);
 
       reportEl.innerHTML = sections.join('');
+    }
+
+    // =========================================================================
+    // CUSTOM ARCHIVE CATEGORIES MANAGER
+    // =========================================================================
+    function showCategoryStatus(msg) {
+      const el = document.getElementById('categoryManagerStatus');
+      if (!el) return;
+      el.textContent = msg;
+      el.classList.remove('hidden');
+    }
+
+    function toggleQuickAddCategory(context) {
+      const box = document.getElementById(`${context}QuickCategoryBox`);
+      const input = document.getElementById(`${context}QuickCategoryInput`);
+      if (!box) return;
+      box.classList.toggle('hidden');
+      if (!box.classList.contains('hidden') && input) {
+        input.focus();
+      }
+    }
+
+    function createQuickCategory(context) {
+      const input = document.getElementById(`${context}QuickCategoryInput`);
+      const box = document.getElementById(`${context}QuickCategoryBox`);
+      if (!input) return;
+      const name = input.value.trim();
+      if (!name) return;
+
+      const existing = vaultCategories.find((c) => c.toLowerCase() === name.toLowerCase());
+      const finalName = existing || name;
+      if (!existing) {
+        vaultCategories.splice(Math.max(0, vaultCategories.length - 1), 0, name);
+        saveCategories();
+      }
+
+      input.value = '';
+      if (box) box.classList.add('hidden');
+
+      if (context === 'ingest') {
+        const sel = document.getElementById('formCategory');
+        if (sel) sel.value = finalName;
+      } else if (context === 'drawer') {
+        const sel = document.getElementById('editCategoryInput');
+        if (sel) {
+          sel.innerHTML = vaultCategories.map((c) => `<option value="${c.replace(/"/g, '&quot;')}">${c}</option>`).join('');
+          sel.value = finalName;
+        }
+      }
+    }
+
+    function addCustomCategoryFromSetup() {
+      const input = document.getElementById('newCategoryNameInput');
+      if (!input) return;
+      const name = input.value.trim();
+      if (!name) return;
+      if (vaultCategories.some((c) => c.toLowerCase() === name.toLowerCase())) {
+        showCategoryStatus(`Category "${name}" already exists.`);
+        return;
+      }
+      vaultCategories.splice(Math.max(0, vaultCategories.length - 1), 0, name);
+      input.value = '';
+      saveCategories();
+      showCategoryStatus(`Added category "${name}".`);
+    }
+
+    function renameCustomCategory(idx) {
+      const oldName = vaultCategories[idx];
+      if (!oldName || oldName === 'Uncategorized') return;
+      const input = document.getElementById(`catEditInput_${idx}`);
+      if (!input) return;
+      const newName = input.value.trim();
+      if (!newName || newName === oldName) return;
+      if (vaultCategories.some((c, i) => i !== idx && c.toLowerCase() === newName.toLowerCase())) {
+        showCategoryStatus(`A category named "${newName}" already exists.`);
+        return;
+      }
+      vaultCategories[idx] = newName;
+      let updatedModels = 0;
+      models.forEach((m) => {
+        if (m.category === oldName) {
+          m.category = newName;
+          syncModelToFirebase(m);
+          updatedModels++;
+        }
+      });
+      saveCategories();
+      if (updatedModels > 0) saveModels();
+      showCategoryStatus(`Renamed "${oldName}" → "${newName}" (${updatedModels} model(s) updated).`);
+    }
+
+    function moveCustomCategory(idx, delta) {
+      const targetIdx = idx + delta;
+      // Keep Uncategorized pinned at the very end
+      const maxMovableIdx = vaultCategories.length - 2;
+      if (idx < 0 || idx > maxMovableIdx || targetIdx < 0 || targetIdx > maxMovableIdx) return;
+      const tmp = vaultCategories[idx];
+      vaultCategories[idx] = vaultCategories[targetIdx];
+      vaultCategories[targetIdx] = tmp;
+      saveCategories();
+    }
+
+    function deleteCustomCategory(idx) {
+      const catName = vaultCategories[idx];
+      if (!catName || catName === 'Uncategorized') return;
+      vaultCategories.splice(idx, 1);
+      let reassigned = 0;
+      models.forEach((m) => {
+        if (m.category === catName) {
+          m.category = 'Uncategorized';
+          syncModelToFirebase(m);
+          reassigned++;
+        }
+      });
+      saveCategories();
+      if (reassigned > 0) saveModels();
+      showCategoryStatus(
+        reassigned > 0
+          ? `Removed "${catName}" and moved ${reassigned} model(s) to Uncategorized.`
+          : `Removed category "${catName}".`
+      );
+    }
+
+    function resetCategoriesToDefault() {
+      vaultCategories = [...DEFAULT_CATEGORIES];
+      mergeModelCategoriesIntoList();
+      saveCategories();
+      showCategoryStatus('Restored default archive categories (kept any active categories currently assigned to models).');
+    }
+
+    function renderCategoryManager() {
+      const listEl = document.getElementById('categoryManagerList');
+      if (!listEl) return;
+
+      const counts = {};
+      models.forEach((m) => {
+        const c = m.category || 'Uncategorized';
+        counts[c] = (counts[c] || 0) + 1;
+      });
+
+      const maxMovableIdx = vaultCategories.length - 2;
+      listEl.innerHTML = vaultCategories.map((cat, idx) => {
+        const count = counts[cat] || 0;
+        const isUncat = cat === 'Uncategorized';
+        const safeVal = cat.replace(/"/g, '&quot;');
+        return `
+          <div class="p-2.5 rounded-lg flex items-center justify-between gap-2 text-xs" style="background-color: var(--bg); border: 1px solid var(--border);">
+            <div class="flex items-center gap-2 flex-1 min-w-0">
+              ${
+                isUncat
+                  ? `<span class="px-2.5 py-1 font-medium" style="color: var(--muted);">${cat} <span class="text-[10px] font-mono">(Default Fallback)</span></span>`
+                  : `<div class="flex flex-col shrink-0">
+                       <button type="button" onclick="moveCustomCategory(${idx}, -1)" ${idx === 0 ? 'disabled' : ''} class="text-[9px] px-1 opacity-60 hover:opacity-100 disabled:opacity-20">▲</button>
+                       <button type="button" onclick="moveCustomCategory(${idx}, 1)" ${idx >= maxMovableIdx ? 'disabled' : ''} class="text-[9px] px-1 opacity-60 hover:opacity-100 disabled:opacity-20">▼</button>
+                     </div>
+                     <input
+                       id="catEditInput_${idx}"
+                       type="text"
+                       value="${safeVal}"
+                       class="vault-input flex-1 min-w-[140px] px-2.5 py-1 text-xs"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();renameCustomCategory(${idx});}"
+                     />`
+              }
+              <span class="text-[11px] font-mono shrink-0 px-2 py-0.5 rounded" style="background-color: var(--surface-2); color: var(--muted);">
+                ${count} model${count === 1 ? '' : 's'}
+              </span>
+            </div>
+            ${
+              isUncat
+                ? ''
+                : `<div class="flex items-center gap-1.5 shrink-0">
+                     <button type="button" onclick="renameCustomCategory(${idx})" class="vault-btn-ghost px-2.5 py-1 text-[11px]">Rename</button>
+                     <button type="button" onclick="deleteCustomCategory(${idx})" class="vault-btn-ghost px-2.5 py-1 text-[11px] text-rose-400">Remove</button>
+                   </div>`
+            }
+          </div>
+        `;
+      }).join('');
     }
 
     async function saveAndTestCloudConfig() {
@@ -3102,17 +3421,23 @@
         msgEl.classList.remove('hidden');
         return;
       }
-      msgEl.textContent = `Pushing ${models.length} models to Firebase...`;
+      msgEl.textContent = `Pushing ${models.length} models and categories to Firebase...`;
       msgEl.classList.remove('hidden');
+      await syncCategoriesToFirebase();
       for (const m of models) {
         await syncModelToFirebase(m);
       }
-      msgEl.textContent = `Synced ${models.length} models to Firebase.`;
+      msgEl.textContent = `Synced ${models.length} models and ${vaultCategories.length} categories to Firebase.`;
     }
 
     function exportVaultJson() {
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([JSON.stringify({ models: models.map(serializeModel) }, null, 2)], { type: 'application/json' }));
+      a.href = URL.createObjectURL(
+        new Blob(
+          [JSON.stringify({ categories: vaultCategories, models: models.map(serializeModel) }, null, 2)],
+          { type: 'application/json' }
+        )
+      );
       a.download = '3d-model-vault-backup.json';
       a.click();
     }
@@ -3125,6 +3450,10 @@
         const parsed = JSON.parse(await file.text());
         const imported = Array.isArray(parsed) ? parsed : parsed.models;
         if (!Array.isArray(imported)) throw new Error('Invalid backup format');
+        if (Array.isArray(parsed.categories) && parsed.categories.length > 0) {
+          vaultCategories = ensureUncategorizedLast(parsed.categories);
+          try { localStorage.setItem(CATEGORIES_KEY, JSON.stringify(vaultCategories)); } catch (e) {}
+        }
         models = imported;
         closeDrawer();
         saveModels();
