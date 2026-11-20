@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>3D Model Vault</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='4' y='4' width='56' height='56' rx='10' fill='%2328282d' stroke='%23ff5a1f' stroke-width='4'/%3E%3Crect x='10' y='10' width='44' height='44' rx='6' fill='%23161618'/%3E%3Crect x='13' y='21' width='38' height='22' rx='4' fill='%23ff5a1f'/%3E%3Ctext x='32' y='37' text-anchor='middle' font-family='monospace' font-weight='900' font-size='16' fill='%23111113'%3E3D%3C/text%3E%3C/svg%3E" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -341,9 +342,27 @@
     </section>
 
     <!-- TAB 5: SETUP -->
-    <section id="view-settings" class="hidden max-w-2xl mx-auto">
+    <section id="view-settings" class="hidden max-w-2xl mx-auto space-y-5">
       <div class="vault-card p-6 space-y-4">
-        <h2 class="text-sm font-bold">Cloud Sync Setup</h2>
+        <h2 class="text-sm font-bold">1-Click Browser Bookmarklet</h2>
+        <p class="text-xs leading-relaxed" style="color: var(--muted);">
+          Drag this button to your browser's bookmarks bar. When you're viewing a model on MakerWorld, Printables, or Thingiverse, click it to open 3D Model Vault with the title, author, and link pre-filled.
+        </p>
+        <div class="flex items-center gap-3 pt-1">
+          <a
+            id="bookmarkletLink"
+            href="#"
+            onclick="return false;"
+            class="vault-btn-primary px-4 py-2 text-xs inline-block cursor-grab active:cursor-grabbing"
+          >
+            Save to 3D Vault
+          </a>
+          <span class="text-[11px]" style="color: var(--muted);">← Drag to Bookmarks Bar</span>
+        </div>
+      </div>
+
+      <div class="vault-card p-6 space-y-4">
+        <h2 class="text-sm font-bold">Cloud Sync & Backups</h2>
         <div class="space-y-3">
           <div>
             <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Firebase Realtime Database URL</label>
@@ -354,13 +373,16 @@
             <input id="cfgGasUrl" type="url" placeholder="https://script.google.com/macros/s/AKfycb.../exec" class="vault-input w-full px-3 py-2 text-xs font-mono" />
           </div>
         </div>
-        <div class="flex items-center justify-between pt-2">
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-2">
           <div class="flex items-center gap-2">
             <button onclick="exportVaultJson()" class="vault-btn-ghost px-3 py-1.5 text-xs">Export JSON</button>
+            <button onclick="document.getElementById('importJsonInput').click()" class="vault-btn-ghost px-3 py-1.5 text-xs">Import JSON</button>
+            <input id="importJsonInput" type="file" accept=".json" class="hidden" onchange="importVaultJson(event)" />
             <button onclick="resetDemoData()" class="vault-btn-ghost px-3 py-1.5 text-xs">Reset Demo</button>
           </div>
           <button onclick="switchTab('library')" class="vault-btn-primary px-4 py-1.5 text-xs">Done</button>
         </div>
+        <div id="importStatusMsg" class="text-xs hidden" style="color: var(--accent);"></div>
       </div>
     </section>
 
@@ -927,13 +949,38 @@
       const isQueued = m.workflow.status === 'queued';
 
       document.getElementById('drawerBody').innerHTML = `
-        <div class="flex items-center justify-between text-xs">
+        <div class="flex items-center justify-between text-xs gap-2">
           <div class="font-mono" style="color: var(--muted);">
             ${originText(m)} · ${m.specs?.estimatedPrintTimeDisplay || '—'} · ${m.specs?.filamentWeightGrams || '—'}g
           </div>
-          <button onclick="toggleQueueStatus('${m.id}')" class="${isQueued ? 'vault-btn-primary' : 'vault-btn-ghost'} px-3 py-1 text-xs">
-            ${isQueued ? 'In Queue' : '+ Queue'}
-          </button>
+          <div class="flex items-center gap-1.5">
+            <button onclick="document.getElementById('editMetaBox').classList.toggle('hidden')" class="vault-btn-ghost px-2.5 py-1 text-xs">
+              Edit
+            </button>
+            <button onclick="toggleQueueStatus('${m.id}')" class="${isQueued ? 'vault-btn-primary' : 'vault-btn-ghost'} px-3 py-1 text-xs">
+              ${isQueued ? 'In Queue' : '+ Queue'}
+            </button>
+          </div>
+        </div>
+
+        <!-- Collapsible Quick Edit & Delete Box -->
+        <div id="editMetaBox" class="hidden p-3.5 rounded-lg space-y-2.5" style="background-color: var(--bg); border: 1px solid var(--border);">
+          <div>
+            <label class="block text-[11px] mb-1" style="color: var(--muted);">Title</label>
+            <input id="editTitleInput" type="text" value="${m.title.replace(/"/g, '&quot;')}" class="vault-input w-full px-2.5 py-1.5 text-xs" />
+          </div>
+          <div>
+            <label class="block text-[11px] mb-1" style="color: var(--muted);">Target Filament / Printer</label>
+            <input id="editFilamentInput" type="text" value="${(m.workflow?.targetFilament || '').replace(/"/g, '&quot;')}" class="vault-input w-full px-2.5 py-1.5 text-xs" />
+          </div>
+          <div class="flex items-center justify-between pt-1">
+            <button id="deleteModelBtn" onclick="requestDeleteModel('${m.id}')" class="text-xs font-medium text-rose-400 hover:underline">
+              Delete Model
+            </button>
+            <button onclick="saveModelEdits('${m.id}')" class="vault-btn-primary px-3 py-1 text-xs">
+              Save Changes
+            </button>
+          </div>
         </div>
 
         <!-- Provenance -->
@@ -1143,11 +1190,56 @@
       switchTab(status === 'queued' ? 'queue' : 'library');
     }
 
+    let deleteArmedId = null;
+
+    function saveModelEdits(id) {
+      const m = models.find((x) => x.id === id);
+      if (!m) return;
+      const newTitle = document.getElementById('editTitleInput').value.trim();
+      const newFilament = document.getElementById('editFilamentInput').value.trim();
+      if (newTitle) m.title = newTitle;
+      m.workflow.targetFilament = newFilament;
+      saveModels();
+    }
+
+    function requestDeleteModel(id) {
+      const btn = document.getElementById('deleteModelBtn');
+      if (deleteArmedId !== id) {
+        deleteArmedId = id;
+        if (btn) btn.textContent = 'Click again to confirm delete';
+        return;
+      }
+      deleteArmedId = null;
+      models = models.filter((x) => x.id !== id);
+      closeDrawer();
+      saveModels();
+    }
+
     function exportVaultJson() {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob([JSON.stringify({ models }, null, 2)], { type: 'application/json' }));
       a.download = '3d-model-vault-backup.json';
       a.click();
+    }
+
+    async function importVaultJson(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const statusEl = document.getElementById('importStatusMsg');
+      try {
+        const parsed = JSON.parse(await file.text());
+        const imported = Array.isArray(parsed) ? parsed : parsed.models;
+        if (!Array.isArray(imported)) throw new Error('Invalid backup format');
+        models = imported;
+        closeDrawer();
+        saveModels();
+        statusEl.textContent = `Imported ${imported.length} models from ${file.name}.`;
+        statusEl.classList.remove('hidden');
+      } catch (err) {
+        statusEl.textContent = `Could not import JSON: ${err.message}`;
+        statusEl.classList.remove('hidden');
+      }
+      event.target.value = '';
     }
 
     function resetDemoData() {
@@ -1156,10 +1248,38 @@
       saveModels();
     }
 
+    function setupBookmarklet() {
+      const link = document.getElementById('bookmarkletLink');
+      if (!link) return;
+      const appUrl = window.location.origin + window.location.pathname;
+      const code = `javascript:(function(){var t=document.querySelector('meta[property="og:title"]')?.content||document.title;var a=document.querySelector('meta[name="author"]')?.content||'';var u=location.href;window.open('${appUrl}?ingest=1&title='+encodeURIComponent(t)+'&url='+encodeURIComponent(u)+'&author='+encodeURIComponent(a),'_blank');})();`;
+      link.setAttribute('href', code);
+    }
+
+    function handleBookmarkletParams() {
+      const params = new URLSearchParams(window.location.search);
+      if (!params.get('ingest')) return false;
+      const title = params.get('title') || '';
+      const url = params.get('url') || '';
+      const author = params.get('author') || '';
+      switchTab('ingest');
+      if (title) document.getElementById('formTitle').value = title;
+      if (url) {
+        document.getElementById('formUrl').value = url;
+        autoDetectSourceFromUrl();
+        toggleSourceFields();
+      }
+      if (author) document.getElementById('formAuthor').value = author;
+      return true;
+    }
+
     window.addEventListener('DOMContentLoaded', () => {
       loadState();
       initThreeViewer();
-      switchTab('library');
+      setupBookmarklet();
+      if (!handleBookmarkletParams()) {
+        switchTab('library');
+      }
     });
   </script>
 </body>
