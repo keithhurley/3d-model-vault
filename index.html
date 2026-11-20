@@ -336,7 +336,7 @@
         </div>
 
         <div class="flex justify-end pt-1">
-          <button onclick="saveNewModel()" class="vault-btn-primary px-5 py-2 text-xs">
+          <button id="saveNewModelBtn" onclick="saveNewModel()" class="vault-btn-primary px-5 py-2 text-xs">
             Save Model
           </button>
         </div>
@@ -364,7 +364,10 @@
       </div>
 
       <div class="vault-card p-6 space-y-4">
-        <h2 class="text-sm font-bold">Cloud Sync & Backups</h2>
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-bold">Cloud Sync & Backups</h2>
+          <span id="cloudStatusBadge" class="text-[11px] font-mono" style="color: var(--muted);">Local Mode</span>
+        </div>
         <div class="space-y-3">
           <div>
             <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Firebase Realtime Database URL</label>
@@ -374,15 +377,21 @@
             <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Google Apps Script Web App URL</label>
             <input id="cfgGasUrl" type="url" placeholder="https://script.google.com/macros/s/AKfycb.../exec" class="vault-input w-full px-3 py-2 text-xs font-mono" />
           </div>
+          <div>
+            <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Apps Script API Secret (if configured)</label>
+            <input id="cfgApiSecret" type="password" placeholder="Optional API_SECRET" class="vault-input w-full px-3 py-2 text-xs font-mono" />
+          </div>
         </div>
+        <div id="cloudStatusMsg" class="text-xs hidden" style="color: var(--accent);"></div>
         <div class="flex flex-wrap items-center justify-between gap-2 pt-2">
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
             <button onclick="exportVaultJson()" class="vault-btn-ghost px-3 py-1.5 text-xs">Export JSON</button>
             <button onclick="document.getElementById('importJsonInput').click()" class="vault-btn-ghost px-3 py-1.5 text-xs">Import JSON</button>
             <input id="importJsonInput" type="file" accept=".json" class="hidden" onchange="importVaultJson(event)" />
+            <button onclick="pushAllToFirebase()" class="vault-btn-ghost px-3 py-1.5 text-xs">Push Local to Cloud</button>
             <button onclick="resetDemoData()" class="vault-btn-ghost px-3 py-1.5 text-xs">Reset Demo</button>
           </div>
-          <button onclick="switchTab('library')" class="vault-btn-primary px-4 py-1.5 text-xs">Done</button>
+          <button onclick="saveAndTestCloudConfig()" class="vault-btn-primary px-4 py-1.5 text-xs">Test & Save</button>
         </div>
         <div id="importStatusMsg" class="text-xs hidden" style="color: var(--accent);"></div>
       </div>
@@ -559,13 +568,45 @@
       }
     ];
 
+    const CONFIG_KEY = '3d_model_vault_cloud_config';
+    let cloudConfig = { firebaseUrl: '', gasUrl: '', apiSecret: '' };
     let models = [];
     let activeDrawerModelId = null;
     let currentTab = 'library';
     let pendingParsedFile = null;
+    let pendingFileRef = null;
     let pendingCustomGeometry = null;
 
+    function loadConfig() {
+      try {
+        const raw = localStorage.getItem(CONFIG_KEY);
+        if (raw) cloudConfig = { ...cloudConfig, ...JSON.parse(raw) };
+      } catch (e) {}
+      if (document.getElementById('cfgFirebaseUrl')) {
+        document.getElementById('cfgFirebaseUrl').value = cloudConfig.firebaseUrl || '';
+        document.getElementById('cfgGasUrl').value = cloudConfig.gasUrl || '';
+        document.getElementById('cfgApiSecret').value = cloudConfig.apiSecret || '';
+      }
+      updateCloudBadge();
+    }
+
+    function updateCloudBadge() {
+      const badge = document.getElementById('cloudStatusBadge');
+      if (!badge) return;
+      if (cloudConfig.firebaseUrl && cloudConfig.gasUrl) {
+        badge.textContent = 'Firebase + Drive Connected';
+        badge.style.color = 'var(--accent)';
+      } else if (cloudConfig.firebaseUrl) {
+        badge.textContent = 'Firebase Connected';
+        badge.style.color = 'var(--accent)';
+      } else {
+        badge.textContent = 'Local Mode';
+        badge.style.color = 'var(--muted)';
+      }
+    }
+
     function loadState() {
+      loadConfig();
       try {
         setTheme(localStorage.getItem(THEME_KEY) || 'workshop');
         const raw = localStorage.getItem(STORAGE_KEY);
@@ -575,10 +616,62 @@
       }
     }
 
+    function serializeModel(m) {
+      const copy = { ...m };
+      delete copy.customGeometry;
+      return copy;
+    }
+
     function saveModels() {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(models)); } catch (e) {}
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(models.map(serializeModel)));
+      } catch (e) {}
       renderAll();
       if (activeDrawerModelId) renderDrawerContent(activeDrawerModelId);
+    }
+
+    async function fetchModelsFromFirebase() {
+      if (!cloudConfig.firebaseUrl) return;
+      try {
+        const base = cloudConfig.firebaseUrl.replace(/\/+$/, '');
+        const res = await fetch(`${base}/models.json`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && typeof data === 'object') {
+          const list = Object.values(data).filter(Boolean);
+          if (list.length > 0) {
+            list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+            models = list;
+            saveModels();
+          }
+        }
+      } catch (e) {
+        console.warn('Firebase fetch failed:', e);
+      }
+    }
+
+    async function syncModelToFirebase(model) {
+      if (!cloudConfig.firebaseUrl || !model || !model.id) return;
+      try {
+        const base = cloudConfig.firebaseUrl.replace(/\/+$/, '');
+        await fetch(`${base}/models/${encodeURIComponent(model.id)}.json`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(serializeModel(model))
+        });
+      } catch (e) {
+        console.warn('Firebase sync failed:', e);
+      }
+    }
+
+    async function deleteModelFromFirebase(id) {
+      if (!cloudConfig.firebaseUrl || !id) return;
+      try {
+        const base = cloudConfig.firebaseUrl.replace(/\/+$/, '');
+        await fetch(`${base}/models/${encodeURIComponent(id)}.json`, { method: 'DELETE' });
+      } catch (e) {
+        console.warn('Firebase delete failed:', e);
+      }
     }
 
     function setTheme(themeName) {
@@ -587,18 +680,44 @@
       updateThreeThemeColors();
     }
 
-    function openModelDrawer(id) {
+    async function openModelDrawer(id) {
       if (currentTab !== 'library' && currentTab !== 'queue') return;
       activeDrawerModelId = id;
       document.getElementById('drawerContainer').classList.remove('hidden');
       renderDrawerContent(id);
-      requestAnimationFrame(() => {
+      requestAnimationFrame(async () => {
         resizeThreeCanvas();
         const m = models.find((x) => x.id === id);
-        if (m) {
-          if (m.customGeometry) loadCustomStlGeometry(m.customGeometry);
-          else buildPresetMesh(m.shapePreset || 'gridfinity');
-          document.getElementById('viewerDimsOverlay').textContent = m.specs?.dimensionsDisplay || '—';
+        if (!m) return;
+        document.getElementById('viewerDimsOverlay').textContent = m.specs?.dimensionsDisplay || '—';
+
+        if (m.customGeometry) {
+          loadCustomStlGeometry(m.customGeometry);
+          return;
+        }
+
+        // Stream real STL from Google Drive if stored there
+        const driveStl = (m.files || []).find((f) => f.driveFileId && f.extension === 'stl');
+        if (driveStl && cloudConfig.gasUrl) {
+          buildPresetMesh(m.shapePreset || 'gridfinity');
+          try {
+            const sep = cloudConfig.gasUrl.includes('?') ? '&' : '?';
+            const secretPart = cloudConfig.apiSecret ? `&secret=${encodeURIComponent(cloudConfig.apiSecret)}` : '';
+            const res = await fetch(`${cloudConfig.gasUrl}${sep}action=getFile&driveFileId=${encodeURIComponent(driveStl.driveFileId)}${secretPart}`);
+            const data = await res.json();
+            if (data.ok && data.base64) {
+              const bin = atob(data.base64);
+              const bytes = new Uint8Array(bin.length);
+              for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+              const geom = parseStlBufferToGeometry(bytes.buffer);
+              m.customGeometry = geom;
+              if (activeDrawerModelId === id) loadCustomStlGeometry(geom);
+            }
+          } catch (e) {
+            console.warn('Drive STL stream failed:', e);
+          }
+        } else {
+          buildPresetMesh(m.shapePreset || 'gridfinity');
         }
       });
     }
@@ -1073,6 +1192,7 @@
       m.workflow.status = m.workflow.status === 'queued' ? 'archived' : 'queued';
       if (m.workflow.status === 'queued') m.workflow.queueOrder = models.filter((x) => x.workflow.status === 'queued').length;
       saveModels();
+      syncModelToFirebase(m);
     }
 
     function moveQueueOrder(id, delta) {
@@ -1085,6 +1205,8 @@
       queued[idx].workflow.queueOrder = queued[swapIdx].workflow.queueOrder;
       queued[swapIdx].workflow.queueOrder = tmp;
       saveModels();
+      syncModelToFirebase(queued[idx]);
+      syncModelToFirebase(queued[swapIdx]);
     }
 
     function setWorkflowStatus(id, st) {
@@ -1092,6 +1214,7 @@
       if (!m) return;
       m.workflow.status = st;
       saveModels();
+      syncModelToFirebase(m);
     }
 
     function updatePinnedNextTime(id) {
@@ -1099,6 +1222,7 @@
       if (!m) return;
       m.nextTimeSummary = document.getElementById('pinnedNextTimeInput').value.trim();
       saveModels();
+      syncModelToFirebase(m);
     }
 
     function addPrintLog(id) {
@@ -1120,6 +1244,7 @@
       if (forNextTime) m.nextTimeSummary = forNextTime;
       if (outcome === 'success') m.workflow.status = 'printed';
       saveModels();
+      syncModelToFirebase(m);
     }
 
     function handleFileSelect(event) {
@@ -1132,7 +1257,8 @@
       if (!document.getElementById('formTitle').value) {
         document.getElementById('formTitle').value = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ');
       }
-      pendingParsedFile = { fileName: file.name, extension: ext };
+      pendingFileRef = file;
+      pendingParsedFile = { fileName: file.name, extension: ext, sizeBytes: file.size };
       const statusEl = document.getElementById('droppedFileStatus');
 
       if (ext === 'stl') {
@@ -1170,17 +1296,30 @@
       else if (url.includes('thingiverse.com')) sel.value = 'thingiverse';
     }
 
-    function saveNewModel() {
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function saveNewModel() {
+      const btn = document.getElementById('saveNewModelBtn');
       const title = document.getElementById('formTitle').value.trim() || 'Untitled Model';
       const st = document.getElementById('formSourceType').value;
       const isP = st === 'personal';
       const status = document.getElementById('formStatus').value;
-      models.unshift({
-        id: 'm_' + Math.random().toString(36).slice(2, 8),
+      const modelId = 'm_' + Math.random().toString(36).slice(2, 8);
+
+      const newModel = {
+        id: modelId,
         title,
         sourceType: st,
         shapePreset: isP ? 'flange' : 'gridfinity',
         customGeometry: pendingCustomGeometry || null,
+        createdAt: new Date().toISOString(),
         source: {
           isPersonalDesign: isP,
           siteName: isP ? 'Personal CAD' : st,
@@ -1203,10 +1342,48 @@
         },
         nextTimeSummary: document.getElementById('formNextTime').value.trim(),
         printLogs: []
-      });
+      };
+
+      // Upload actual file binary to Google Drive if Apps Script URL is configured
+      if (pendingFileRef && cloudConfig.gasUrl) {
+        if (btn) { btn.disabled = true; btn.textContent = 'Uploading to Drive...'; }
+        try {
+          const base64 = await fileToBase64(pendingFileRef);
+          const res = await fetch(cloudConfig.gasUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({
+              action: 'uploadFile',
+              secret: cloudConfig.apiSecret || '',
+              modelId: newModel.id,
+              title: newModel.title,
+              fileName: pendingFileRef.name,
+              mimeType: pendingFileRef.type || 'application/octet-stream',
+              base64,
+              model: serializeModel(newModel)
+            })
+          });
+          const data = await res.json();
+          if (data.ok && data.driveFileId) {
+            newModel.files[0].driveFileId = data.driveFileId;
+            newModel.storage = {
+              driveFolderId: data.driveFolderId,
+              driveFolderUrl: data.driveFolderUrl
+            };
+          }
+        } catch (err) {
+          console.warn('Drive upload error:', err);
+        } finally {
+          if (btn) { btn.disabled = false; btn.textContent = 'Save Model'; }
+        }
+      }
+
+      models.unshift(newModel);
       pendingParsedFile = null;
+      pendingFileRef = null;
       pendingCustomGeometry = null;
       saveModels();
+      await syncModelToFirebase(newModel);
       switchTab(status === 'queued' ? 'queue' : 'library');
     }
 
@@ -1220,6 +1397,7 @@
       if (newTitle) m.title = newTitle;
       m.workflow.targetFilament = newFilament;
       saveModels();
+      syncModelToFirebase(m);
     }
 
     function requestDeleteModel(id) {
@@ -1233,11 +1411,62 @@
       models = models.filter((x) => x.id !== id);
       closeDrawer();
       saveModels();
+      deleteModelFromFirebase(id);
+    }
+
+    async function saveAndTestCloudConfig() {
+      cloudConfig.firebaseUrl = document.getElementById('cfgFirebaseUrl').value.trim().replace(/\/+$/, '');
+      cloudConfig.gasUrl = document.getElementById('cfgGasUrl').value.trim();
+      cloudConfig.apiSecret = document.getElementById('cfgApiSecret').value.trim();
+      try { localStorage.setItem(CONFIG_KEY, JSON.stringify(cloudConfig)); } catch (e) {}
+      updateCloudBadge();
+
+      const msgEl = document.getElementById('cloudStatusMsg');
+      msgEl.classList.remove('hidden');
+      msgEl.textContent = 'Testing connections...';
+
+      const parts = [];
+      if (cloudConfig.firebaseUrl) {
+        try {
+          const r = await fetch(`${cloudConfig.firebaseUrl}/models.json`);
+          parts.push(r.ok ? 'Firebase: OK' : `Firebase: HTTP ${r.status}`);
+        } catch (e) {
+          parts.push('Firebase: Failed');
+        }
+      }
+      if (cloudConfig.gasUrl) {
+        try {
+          const sep = cloudConfig.gasUrl.includes('?') ? '&' : '?';
+          const sec = cloudConfig.apiSecret ? `&secret=${encodeURIComponent(cloudConfig.apiSecret)}` : '';
+          const r = await fetch(`${cloudConfig.gasUrl}${sep}action=ping${sec}`);
+          const d = await r.json();
+          parts.push(d.ok ? 'Apps Script: OK' : `Apps Script: ${d.error}`);
+        } catch (e) {
+          parts.push('Apps Script: Failed');
+        }
+      }
+      msgEl.textContent = parts.length ? parts.join(' · ') : 'Saved local mode (no cloud URLs entered).';
+      if (cloudConfig.firebaseUrl) await fetchModelsFromFirebase();
+    }
+
+    async function pushAllToFirebase() {
+      const msgEl = document.getElementById('cloudStatusMsg');
+      if (!cloudConfig.firebaseUrl) {
+        msgEl.textContent = 'Enter a Firebase URL first and click Test & Save.';
+        msgEl.classList.remove('hidden');
+        return;
+      }
+      msgEl.textContent = `Pushing ${models.length} models to Firebase...`;
+      msgEl.classList.remove('hidden');
+      for (const m of models) {
+        await syncModelToFirebase(m);
+      }
+      msgEl.textContent = `Synced ${models.length} models to Firebase.`;
     }
 
     function exportVaultJson() {
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([JSON.stringify({ models }, null, 2)], { type: 'application/json' }));
+      a.href = URL.createObjectURL(new Blob([JSON.stringify({ models: models.map(serializeModel) }, null, 2)], { type: 'application/json' }));
       a.download = '3d-model-vault-backup.json';
       a.click();
     }
@@ -1293,13 +1522,14 @@
       return true;
     }
 
-    window.addEventListener('DOMContentLoaded', () => {
+    window.addEventListener('DOMContentLoaded', async () => {
       loadState();
       initThreeViewer();
       setupBookmarklet();
       if (!handleBookmarkletParams()) {
         switchTab('library');
       }
+      await fetchModelsFromFirebase();
     });
   </script>
 </body>
