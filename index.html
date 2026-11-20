@@ -577,7 +577,51 @@
     let pendingFileRef = null;
     let pendingCustomGeometry = null;
 
+    function handleConfigHash() {
+      const hash = window.location.hash || '';
+      if (!hash.startsWith('#cfg=')) return;
+      try {
+        const b64 = hash.slice(5);
+        const json = decodeURIComponent(escape(atob(b64)));
+        const parsed = JSON.parse(json);
+        if (parsed && typeof parsed === 'object') {
+          cloudConfig = {
+            firebaseUrl: (parsed.firebaseUrl || '').replace(/\/+$/, ''),
+            gasUrl: parsed.gasUrl || '',
+            apiSecret: parsed.apiSecret || ''
+          };
+          localStorage.setItem(CONFIG_KEY, JSON.stringify(cloudConfig));
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+      } catch (e) {
+        console.warn('Invalid #cfg hash:', e);
+      }
+    }
+
+    async function copyDeviceSetupLink() {
+      const fb = (document.getElementById('cfgFirebaseUrl')?.value || cloudConfig.firebaseUrl || '').trim().replace(/\/+$/, '');
+      const gas = (document.getElementById('cfgGasUrl')?.value || cloudConfig.gasUrl || '').trim();
+      const sec = (document.getElementById('cfgApiSecret')?.value || cloudConfig.apiSecret || '').trim();
+      const msgEl = document.getElementById('cloudStatusMsg');
+      if (!fb && !gas) {
+        msgEl.textContent = 'Enter your Firebase or Apps Script URL first.';
+        msgEl.classList.remove('hidden');
+        return;
+      }
+      const payload = JSON.stringify({ firebaseUrl: fb, gasUrl: gas, apiSecret: sec });
+      const b64 = btoa(unescape(encodeURIComponent(payload)));
+      const url = `${window.location.origin}${window.location.pathname}#cfg=${b64}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        msgEl.textContent = 'Copied! Bookmark this URL privately to auto-configure any device in 1 click.';
+      } catch (e) {
+        msgEl.textContent = 'Setup URL: ' + url;
+      }
+      msgEl.classList.remove('hidden');
+    }
+
     function loadConfig() {
+      handleConfigHash();
       try {
         const raw = localStorage.getItem(CONFIG_KEY);
         if (raw) cloudConfig = { ...cloudConfig, ...JSON.parse(raw) };
