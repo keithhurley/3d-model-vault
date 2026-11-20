@@ -127,19 +127,28 @@
 
   <!-- Minimal Header -->
   <header style="background-color: var(--surface); border-bottom: 1px solid var(--border);" class="sticky top-0 z-30">
-    <div class="max-w-6xl mx-auto px-5 py-3 flex flex-wrap items-center justify-between gap-4">
+    <div class="max-w-6xl mx-auto px-5 pt-3 pb-2 space-y-2.5">
 
-      <!-- Vault 3D Icon + Title -->
-      <div class="flex items-center gap-3">
-        <svg class="w-9 h-9 shrink-0" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="3D Model Vault">
-          <rect x="4" y="4" width="56" height="56" rx="10" fill="var(--surface-2)" stroke="var(--accent)" stroke-width="3.5"/>
-          <rect x="10" y="10" width="44" height="44" rx="6" fill="var(--bg)" stroke="var(--border-strong)" stroke-width="2"/>
-          <rect x="52" y="16" width="5" height="9" rx="1.5" fill="var(--accent)"/>
-          <rect x="52" y="39" width="5" height="9" rx="1.5" fill="var(--accent)"/>
-          <rect x="13" y="21" width="38" height="22" rx="4" fill="var(--accent)"/>
-          <text x="32" y="37" text-anchor="middle" font-family="monospace, sans-serif" font-weight="900" font-size="16" letter-spacing="1" fill="var(--accent-fg)">3D</text>
-        </svg>
-        <h1 class="text-lg font-bold tracking-tight">3D Model Vault</h1>
+      <!-- Top Line: Vault 3D Icon + Title (Left) & 3-Dot Theme Selector (Right) -->
+      <div class="flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <svg class="w-9 h-9 shrink-0" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="3D Model Vault">
+            <rect x="4" y="4" width="56" height="56" rx="10" fill="var(--surface-2)" stroke="var(--accent)" stroke-width="3.5"/>
+            <rect x="10" y="10" width="44" height="44" rx="6" fill="var(--bg)" stroke="var(--border-strong)" stroke-width="2"/>
+            <rect x="52" y="16" width="5" height="9" rx="1.5" fill="var(--accent)"/>
+            <rect x="52" y="39" width="5" height="9" rx="1.5" fill="var(--accent)"/>
+            <rect x="13" y="21" width="38" height="22" rx="4" fill="var(--accent)"/>
+            <text x="32" y="37" text-anchor="middle" font-family="monospace, sans-serif" font-weight="900" font-size="16" letter-spacing="1" fill="var(--accent-fg)">3D</text>
+          </svg>
+          <h1 class="text-lg font-bold tracking-tight">3D Model Vault</h1>
+        </div>
+
+        <!-- 3-Dot Theme Switcher (Always on same line as Title & Icon, Right Side) -->
+        <div class="flex items-center gap-2 shrink-0" title="Switch Theme">
+          <button onclick="setTheme('workshop')" aria-label="Workshop Theme" class="w-4 h-4 rounded-full border border-white/20 transition hover:scale-110" style="background: #ff5a1f;"></button>
+          <button onclick="setTheme('daylight')" aria-label="Daylight Theme" class="w-4 h-4 rounded-full border border-black/20 transition hover:scale-110" style="background: #f4f0e8;"></button>
+          <button onclick="setTheme('blueprint')" aria-label="Blueprint Theme" class="w-4 h-4 rounded-full border border-white/20 transition hover:scale-110" style="background: #38d9f5;"></button>
+        </div>
       </div>
 
       <!-- Clean Text Navigation Tabs -->
@@ -160,13 +169,6 @@
           Setup
         </button>
       </nav>
-
-      <!-- Compact 3-Dot Theme Switcher -->
-      <div class="flex items-center gap-1.5" title="Switch Theme">
-        <button onclick="setTheme('workshop')" aria-label="Workshop Theme" class="w-4 h-4 rounded-full border border-white/20 transition hover:scale-110" style="background: #ff5a1f;"></button>
-        <button onclick="setTheme('daylight')" aria-label="Daylight Theme" class="w-4 h-4 rounded-full border border-black/20 transition hover:scale-110" style="background: #f4f0e8;"></button>
-        <button onclick="setTheme('blueprint')" aria-label="Blueprint Theme" class="w-4 h-4 rounded-full border border-white/20 transition hover:scale-110" style="background: #38d9f5;"></button>
-      </div>
 
     </div>
   </header>
@@ -193,6 +195,7 @@
         </select>
         <select id="filterStatus" onchange="renderAll()" class="vault-input px-3 py-2 text-xs">
           <option value="all">All Statuses</option>
+          <option value="favorites">★ Favorites</option>
           <option value="queued">In Queue</option>
           <option value="printing">Printing</option>
           <option value="printed">Printed</option>
@@ -804,7 +807,8 @@
 
       const filtered = models.filter((m) => {
         if (srcFilter !== 'all' && m.sourceType !== srcFilter) return false;
-        if (stFilter !== 'all' && m.workflow.status !== stFilter) return false;
+        if (stFilter === 'favorites' && !m.workflow?.favorite) return false;
+        if (stFilter !== 'all' && stFilter !== 'favorites' && m.workflow.status !== stFilter) return false;
         if (!q) return true;
         return [m.title, m.source?.author, m.source?.cadTool, m.nextTimeSummary, m.workflow?.targetFilament].join(' ').toLowerCase().includes(q);
       });
@@ -817,12 +821,21 @@
 
       grid.innerHTML = filtered.map((m) => {
         const isQueued = m.workflow.status === 'queued';
+        const isFav = Boolean(m.workflow?.favorite);
         return `
           <div onclick="openModelDrawer('${m.id}')" class="vault-card p-5 cursor-pointer flex flex-col justify-between gap-4">
             <div class="space-y-2">
               <div class="flex items-center justify-between text-[11px] font-medium" style="color: var(--muted);">
                 <span>${originText(m)}</span>
-                <span class="uppercase tracking-wider" style="color: ${isQueued ? 'var(--accent)' : 'var(--muted)'};">${m.workflow.status}</span>
+                <div class="flex items-center gap-2">
+                  <button
+                    onclick="toggleFavorite('${m.id}', event)"
+                    title="${isFav ? 'Remove from Favorites' : 'Add to Favorites'}"
+                    class="text-xs transition hover:scale-110"
+                    style="color: ${isFav ? 'var(--brass)' : 'var(--muted)'};"
+                  >${isFav ? '★' : '☆'}</button>
+                  <span class="uppercase tracking-wider" style="color: ${isQueued ? 'var(--accent)' : 'var(--muted)'};">${m.workflow.status}</span>
+                </div>
               </div>
 
               <h3 class="text-sm font-semibold leading-snug">${m.title}</h3>
@@ -850,6 +863,14 @@
           </div>
         `;
       }).join('');
+    }
+
+    function toggleFavorite(id, event) {
+      if (event) event.stopPropagation();
+      const m = models.find((x) => x.id === id);
+      if (!m) return;
+      m.workflow.favorite = !m.workflow.favorite;
+      saveModels();
     }
 
     function renderQueueList(queuedModels) {
