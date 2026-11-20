@@ -214,8 +214,11 @@
       <div id="libraryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
     </section>
 
-    <!-- TAB 2: PRINT QUEUE (No title card — just the queue cards) -->
-    <section id="view-queue" class="hidden space-y-3">
+    <!-- TAB 2: PRINT QUEUE & PHASE 2 LOCAL WORKING FOLDER -->
+    <section id="view-queue" class="hidden space-y-4">
+      <div id="localQueueWorkspaceBar" class="vault-card p-4 space-y-3"></div>
+      <div id="localQueueStatusMsg" class="hidden vault-card px-4 py-2.5 text-xs" style="color: var(--accent); border-color: var(--accent);"></div>
+      <div id="localCleanupGuardrailBox" class="hidden vault-card p-4 space-y-3" style="background-color: var(--brass-soft); border-color: var(--brass);"></div>
       <div id="queueList" class="space-y-2.5"></div>
     </section>
 
@@ -608,8 +611,27 @@
           license: 'CC BY-NC-SA 4.0'
         },
         files: [
-          { fileName: 'gridfinity_pliers_2x3.stl', extension: 'stl' },
-          { fileName: 'gridfinity_pliers_2x3_bambu.3mf', extension: '3mf' }
+          {
+            fileId: 'f_orig_8f92a1',
+            fileName: 'gridfinity_pliers_2x3.stl',
+            extension: 'stl',
+            role: 'original',
+            isOriginal: true,
+            locked: true,
+            versionLabel: 'Original Geometry',
+            addedAt: '2026-11-18'
+          },
+          {
+            fileId: 'f_ver_8f92a1_1',
+            fileName: 'gridfinity_pliers_2x3_bambu.3mf',
+            extension: '3mf',
+            role: 'slicer_project',
+            isOriginal: false,
+            locked: false,
+            versionLabel: 'Bambu P1S · 0.4mm · PETG (+0.1mm XY comp)',
+            addedAt: '2026-11-18',
+            sliceSpecs: { printTime: '2h 14m', weightGrams: 68.4, material: 'PETG' }
+          }
         ],
         specs: {
           dimensionsDisplay: '84.0 × 126.0 × 42.5 mm',
@@ -648,8 +670,26 @@
           designVersion: 'v1.3'
         },
         files: [
-          { fileName: 'ptfe_passthrough_v1.3.f3d', extension: 'f3d' },
-          { fileName: 'ptfe_passthrough_v1.3.stl', extension: 'stl' }
+          {
+            fileId: 'f_orig_3c41b9',
+            fileName: 'ptfe_passthrough_v1.3.f3d',
+            extension: 'f3d',
+            role: 'original',
+            isOriginal: true,
+            locked: true,
+            versionLabel: 'Original Fusion 360 CAD (v1.3)',
+            addedAt: '2026-11-19'
+          },
+          {
+            fileId: 'f_ver_3c41b9_1',
+            fileName: 'ptfe_passthrough_v1.3.stl',
+            extension: 'stl',
+            role: 'cad_revision',
+            isOriginal: false,
+            locked: false,
+            versionLabel: 'v1.3 Exported Mesh (0.25mm thread clearance)',
+            addedAt: '2026-11-19'
+          }
         ],
         specs: {
           dimensionsDisplay: '38.0 × 38.0 × 28.0 mm',
@@ -688,8 +728,27 @@
           license: 'CC BY 4.0'
         },
         files: [
-          { fileName: 'cable_spine_links.stl', extension: 'stl' },
-          { fileName: 'cable_spine_0.2mm_PETG.gcode', extension: 'gcode' }
+          {
+            fileId: 'f_orig_7a19e4',
+            fileName: 'cable_spine_links.stl',
+            extension: 'stl',
+            role: 'original',
+            isOriginal: true,
+            locked: true,
+            versionLabel: 'Original Mesh',
+            addedAt: '2026-11-16'
+          },
+          {
+            fileId: 'f_ver_7a19e4_1',
+            fileName: 'cable_spine_0.2mm_PETG.gcode',
+            extension: 'gcode',
+            role: 'gcode',
+            isOriginal: false,
+            locked: false,
+            versionLabel: '0.2mm Layer · Overture PETG 240°C',
+            addedAt: '2026-11-17',
+            sliceSpecs: { printTime: '3h 05m', weightGrams: 84.0, material: 'PETG' }
+          }
         ],
         specs: {
           dimensionsDisplay: '145.0 × 62.0 × 24.0 mm',
@@ -732,6 +791,11 @@
     let driveAuditFoldersById = {};
     let driveAuditRan = false;
     let qaAttachTargetModelId = null;
+    const LOCAL_STAGE_KEY = '3d_model_vault_local_stage_manifest';
+    let localDirHandle = null;
+    let localDirName = '';
+    let localDirNeedsReauth = false;
+    let localStageManifest = {};
     let activeDrawerModelId = null;
     let currentTab = 'library';
     let pendingParsedFile = null;
@@ -1276,6 +1340,92 @@
       }
     }
 
+    function inferFileRole(ext, isOriginal) {
+      if (isOriginal) return 'original';
+      const e = (ext || '').toLowerCase();
+      if (e === '3mf') return 'slicer_project';
+      if (e === 'gcode' || e === 'gco' || e === 'bgcode') return 'gcode';
+      if (e === 'f3d' || e === 'step' || e === 'stp' || e === 'scad') return 'cad_revision';
+      return 'mesh_variant';
+    }
+
+    function fileRoleDisplayLabel(role, ext) {
+      if (role === 'original') return 'Original Source';
+      if (role === 'slicer_project') return 'Slicer Project (.3MF)';
+      if (role === 'gcode') return 'Sliced G-Code';
+      if (role === 'cad_revision') return 'CAD / Parametric Revision';
+      if (role === 'printer_profile') return 'Printer / Filament Profile';
+      return `Project Variant (.${(ext || 'file').toUpperCase()})`;
+    }
+
+    function normalizeModelFiles(m) {
+      if (!m) return;
+      if (!Array.isArray(m.files)) m.files = [];
+      if (m.files.length === 0) return;
+
+      let hasOrig = m.files.some((f) => Boolean(f.isOriginal || f.locked || f.role === 'original'));
+      m.files.forEach((f, idx) => {
+        const ext = (f.extension || (f.fileName || '').split('.').pop() || 'stl').toLowerCase();
+        f.extension = ext;
+        if (!f.fileId) {
+          f.fileId = 'f_' + m.id + '_' + idx + '_' + Math.random().toString(36).slice(2, 6);
+        }
+        if (!hasOrig && idx === 0) {
+          f.isOriginal = true;
+          f.locked = true;
+          f.role = 'original';
+          hasOrig = true;
+        } else if (f.isOriginal || f.locked || f.role === 'original') {
+          f.isOriginal = true;
+          f.locked = true;
+          f.role = 'original';
+        } else {
+          f.isOriginal = false;
+          f.locked = false;
+          f.role = f.role || inferFileRole(ext, false);
+        }
+      });
+    }
+
+    function ensureAllModelsNormalized() {
+      models.forEach((m) => normalizeModelFiles(m));
+    }
+
+    function getOriginalFile(m) {
+      normalizeModelFiles(m);
+      return (m.files || []).find((f) => f.isOriginal) || (m.files || [])[0] || null;
+    }
+
+    function getAdditionalFiles(m) {
+      normalizeModelFiles(m);
+      const orig = getOriginalFile(m);
+      return (m.files || []).filter((f) => !orig || f.fileId !== orig.fileId);
+    }
+
+    function renderCardFileSummaryBadges(m) {
+      if (!hasValidAssociatedFiles(m)) {
+        return `<span class="text-[11px] font-mono uppercase" style="color: var(--brass);">⚠ No file attached</span>`;
+      }
+      const orig = getOriginalFile(m);
+      const extras = getAdditionalFiles(m);
+      const origExt = (orig?.extension || 'STL').toUpperCase();
+      const extraExts = [...new Set(extras.map((f) => (f.extension || '').toUpperCase()).filter(Boolean))];
+      return `
+        <div class="flex items-center gap-1.5 flex-wrap min-w-0">
+          <span title="Non-perishable original file: ${orig?.fileName || ''}" class="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded font-semibold" style="background-color: var(--surface-2); color: var(--text); border: 1px solid var(--border);">
+            🔒 ${origExt}
+          </span>
+          ${
+            extras.length > 0
+              ? `<span title="${extras.length} additional slicer/project version(s): ${extras.map((e) => e.fileName).join(', ')}" class="text-[10px] font-mono px-1.5 py-0.5 rounded font-medium" style="background-color: var(--accent-soft); color: var(--accent);">
+                   +${extras.length} ${extraExts.join('/')}
+                 </span>`
+              : ''
+          }
+        </div>
+      `;
+    }
+
     function getModelPictureUrl(m) {
       return m.thumbnailDataUrl || m.storage?.thumbnailFallbackUrl || '';
     }
@@ -1347,6 +1497,7 @@
     }
 
     function renderAll() {
+      ensureAllModelsNormalized();
       populateCategoryDropdowns();
       const queuedModels = models
         .filter((m) => m.workflow.status === 'queued' || m.workflow.status === 'printing')
@@ -1389,7 +1540,8 @@
           m.source?.url,
           m.nextTimeSummary,
           m.specs?.recommendedMaterial,
-          m.workflow?.targetFilament
+          m.workflow?.targetFilament,
+          ...(m.files || []).map((f) => `${f.fileName} ${f.versionLabel || ''}`)
         ].join(' ').toLowerCase().includes(q);
       });
 
@@ -1469,13 +1621,11 @@
               }
             </div>
 
-            <div class="flex items-center justify-between pt-3" style="border-top: 1px solid var(--border);">
-              <span class="text-[11px] font-mono uppercase" style="color: ${hasValidAssociatedFiles(m) ? 'var(--muted)' : 'var(--brass)'};">
-                ${hasValidAssociatedFiles(m) ? (m.files || []).map((f) => f.extension).join(' · ') : '⚠ No file attached'}
-              </span>
+            <div class="flex items-center justify-between gap-2 pt-3" style="border-top: 1px solid var(--border);">
+              ${renderCardFileSummaryBadges(m)}
               <button
                 onclick="toggleQueueStatus('${m.id}', event)"
-                class="${isQueued ? 'vault-btn-primary' : 'vault-btn-ghost'} px-2.5 py-1 text-[11px]"
+                class="${isQueued ? 'vault-btn-primary' : 'vault-btn-ghost'} px-2.5 py-1 text-[11px] shrink-0"
               >
                 ${isQueued ? 'Queued' : '+ Queue'}
               </button>
@@ -1494,13 +1644,17 @@
     }
 
     function renderQueueList(queuedModels) {
+      renderLocalQueueWorkspaceBar(queuedModels);
       const listEl = document.getElementById('queueList');
       if (queuedModels.length === 0) {
         listEl.innerHTML = `<div class="vault-card p-10 text-center text-xs" style="color: var(--muted);">Your print queue is empty.</div>`;
         return;
       }
 
-      listEl.innerHTML = queuedModels.map((m, idx) => `
+      listEl.innerHTML = queuedModels.map((m, idx) => {
+        const isStaged = Boolean(localStageManifest[m.id]);
+        const isPrinting = m.workflow.status === 'printing';
+        return `
         <div
           onclick="openModelDrawer('${m.id}')"
           class="vault-card px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer"
@@ -1517,9 +1671,20 @@
             </div>
 
             <div class="min-w-0 space-y-1">
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2 flex-wrap">
                 <h3 class="text-sm font-semibold truncate">${m.title}</h3>
                 <span class="text-[10px] px-1.5 py-0.5 rounded shrink-0" style="background-color: var(--surface-2); color: var(--muted);">${m.category || 'Uncategorized'}</span>
+                ${renderCardFileSummaryBadges(m)}
+                ${
+                  isPrinting
+                    ? `<span class="text-[10px] px-1.5 py-0.5 rounded font-mono uppercase" style="background-color: var(--accent-soft); color: var(--accent);">Printing</span>`
+                    : ''
+                }
+                ${
+                  isStaged
+                    ? `<span title="Staged in local working folder: ${localStageManifest[m.id].folderName}" class="text-[10px] px-1.5 py-0.5 rounded font-mono" style="background-color: var(--brass-soft); color: var(--brass);">📁 Local Ready</span>`
+                    : ''
+                }
               </div>
               <div class="text-xs font-mono" style="color: var(--muted);">
                 ${m.specs?.estimatedPrintTimeDisplay || '—'} · ${m.specs?.filamentWeightGrams || '—'}g · ${formatFilamentSummary(m)}
@@ -1532,16 +1697,25 @@
             </div>
           </div>
 
-          <div class="flex items-center gap-2 shrink-0">
+          <div class="flex items-center gap-2 flex-wrap shrink-0">
+            <button onclick="event.stopPropagation(); pullModelForPrinting('${m.id}')" title="Download or stage files into local working folder for printing" class="vault-btn-ghost px-2.5 py-1.5 text-xs">
+              ⬇ ${localDirHandle ? 'Stage' : 'Download'}
+            </button>
+            ${
+              isStaged && localDirHandle
+                ? `<button onclick="event.stopPropagation(); cleanLocalModelFolder('${m.id}', false)" title="Remove local working copy" class="vault-btn-ghost px-2.5 py-1.5 text-xs">🧹</button>`
+                : ''
+            }
             <button onclick="event.stopPropagation(); setWorkflowStatus('${m.id}', 'printing')" class="vault-btn-primary px-3 py-1.5 text-xs">
-              Start
+              ${isPrinting ? 'Printing' : 'Start'}
             </button>
             <button onclick="event.stopPropagation(); setWorkflowStatus('${m.id}', 'printed')" class="vault-btn-ghost px-3 py-1.5 text-xs">
               Done
             </button>
           </div>
         </div>
-      `).join('');
+      `;
+      }).join('');
     }
 
     function renderSourcesDirectory() {
@@ -1583,16 +1757,19 @@
     }
 
     // =========================================================================
-    // DRAWER INSPECTOR (Pinned multi-line editor + Past logs + Log New Print at bottom)
+    // DRAWER INSPECTOR (Pinned multi-line editor + Files/Versions + Past logs)
     // =========================================================================
     function renderDrawerContent(id) {
       const m = models.find((x) => x.id === id);
       if (!m) return;
+      normalizeModelFiles(m);
       document.getElementById('drawerTitle').textContent = m.title;
       const isQueued = m.workflow.status === 'queued';
       const picUrl = getModelPictureUrl(m);
       const srcUrl = (m.source?.url || '').trim();
       const isHttpUrl = /^https?:\/\//i.test(srcUrl);
+      const origFile = getOriginalFile(m);
+      const extraFiles = getAdditionalFiles(m);
 
       document.getElementById('drawerBody').innerHTML = `
         <div class="flex items-center justify-between text-xs gap-2 flex-wrap">
@@ -1671,13 +1848,126 @@
                       : `· <span style="color: var(--brass);">⚠ Missing Source URL</span>`
                 }</div>`
           }
-          <div class="flex items-center gap-2 pt-1 flex-wrap">
-            <span>Files: <strong style="color: var(--text);">${(m.files || []).map((f) => f.fileName).join(', ') || 'None'}</strong></span>
+          ${
+            !picUrl
+              ? `<div><span style="color: var(--brass);">⚠ No preview image</span></div>`
+              : ''
+          }
+        </div>
+
+        <!-- Project Files & Slicer Versions (Protected Original + Removable Slicer/Version Files) -->
+        <div class="p-3.5 rounded-lg space-y-3" style="background-color: var(--bg); border: 1px solid var(--border);">
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <div class="text-xs font-semibold">Project Files & Slicer Versions (${(m.files || []).length})</div>
+              <div class="text-[11px]" style="color: var(--muted);">Original file is permanently locked; add or remove slicer profiles & versions anytime.</div>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button type="button" onclick="pullModelForPrinting('${m.id}')" title="Download all files (or stage to linked local working folder) for printing" class="vault-btn-ghost px-2.5 py-1 text-[11px]">
+                ⬇ ${localDirHandle ? 'Stage for Print' : 'Download All'}
+              </button>
+              <button type="button" onclick="document.getElementById('addVersionBox_${m.id}').classList.toggle('hidden')" class="vault-btn-primary px-2.5 py-1 text-[11px]">
+                + Add File / Version
+              </button>
+            </div>
+          </div>
+
+          <!-- Non-Perishable Original File -->
+          <div class="space-y-1.5">
+            <div class="text-[10px] font-mono uppercase tracking-wider" style="color: var(--muted);">Original File (Non-Perishable Record)</div>
             ${
-              !picUrl
-                ? `<span style="color: var(--brass);">· ⚠ No preview image</span>`
-                : ''
+              origFile
+                ? `<div class="p-2.5 rounded-md flex items-center justify-between gap-2 text-xs" style="background-color: var(--surface); border: 1px solid var(--border-strong);">
+                     <div class="min-w-0 space-y-0.5">
+                       <div class="flex items-center gap-1.5 flex-wrap">
+                         <span class="text-[10px] font-mono px-1.5 py-0.5 rounded font-semibold" style="background-color: var(--surface-2); color: var(--text);">🔒 ORIGINAL · ${(origFile.extension || 'STL').toUpperCase()}</span>
+                         <span class="font-semibold truncate">${origFile.fileName}</span>
+                       </div>
+                       <div class="text-[11px]" style="color: var(--muted);">
+                         ${origFile.versionLabel || 'Primary Source Geometry'}
+                         ${origFile.sizeBytes ? ` · ${(origFile.sizeBytes / 1024).toFixed(1)} KB` : ''}
+                         ${origFile.addedAt ? ` · ${origFile.addedAt}` : ''}
+                       </div>
+                     </div>
+                     <div class="flex items-center gap-1.5 shrink-0">
+                       ${
+                         origFile.driveFileId && cloudConfig.gasUrl
+                           ? `<button type="button" onclick="downloadVaultFile('${m.id}', '${origFile.fileId}')" class="vault-btn-ghost px-2 py-1 text-[10px]">Download</button>`
+                           : ''
+                       }
+                       <span title="Original source file cannot be deleted from this record" class="text-[10px] font-mono px-2 py-0.5 rounded" style="color: var(--muted); border: 1px solid var(--border);">Protected</span>
+                     </div>
+                   </div>`
+                : `<div class="p-2.5 rounded-md flex items-center justify-between gap-2 text-xs" style="background-color: var(--surface); border: 1px dashed var(--brass);">
+                     <span style="color: var(--brass);">⚠ No original file attached yet.</span>
+                     <button type="button" onclick="promptAttachFileToModel('${m.id}')" class="vault-btn-primary px-2.5 py-1 text-[11px]">Attach Original File</button>
+                   </div>`
             }
+          </div>
+
+          <!-- Additional Slicer / Project Versions -->
+          <div class="space-y-1.5">
+            <div class="text-[10px] font-mono uppercase tracking-wider" style="color: var(--muted);">Additional Slicer & Project Versions (${extraFiles.length})</div>
+            ${
+              extraFiles.length === 0
+                ? `<div class="text-[11px] py-1.5" style="color: var(--muted);">No additional slicer (.3MF / .GCODE) or revision files attached yet.</div>`
+                : `<div class="space-y-1.5">` + extraFiles.map((f) => `
+                    <div class="p-2.5 rounded-md flex items-center justify-between gap-2 text-xs" style="background-color: var(--surface); border: 1px solid var(--border);">
+                      <div class="min-w-0 space-y-0.5">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                          <span class="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded font-semibold" style="background-color: var(--accent-soft); color: var(--accent);">${(f.extension || 'FILE').toUpperCase()}</span>
+                          <span class="font-medium truncate">${f.fileName}</span>
+                        </div>
+                        <div class="text-[11px]" style="color: var(--muted);">
+                          ${f.versionLabel ? `<strong style="color: var(--text);">${f.versionLabel}</strong> · ` : ''}${fileRoleDisplayLabel(f.role, f.extension)}
+                          ${f.sliceSpecs ? ` · ${f.sliceSpecs.printTime || '—'} · ${f.sliceSpecs.weightGrams || '—'}g ${f.sliceSpecs.material || ''}` : ''}
+                          ${f.sizeBytes ? ` · ${(f.sizeBytes / 1024).toFixed(1)} KB` : ''}
+                        </div>
+                      </div>
+                      <div class="flex items-center gap-1.5 shrink-0">
+                        ${
+                          f.driveFileId && cloudConfig.gasUrl
+                            ? `<button type="button" onclick="downloadVaultFile('${m.id}', '${f.fileId}')" class="vault-btn-ghost px-2 py-1 text-[10px]">Download</button>`
+                            : ''
+                        }
+                        <button type="button" onclick="removeAdditionalModelFile('${m.id}', '${f.fileId}')" class="vault-btn-ghost px-2 py-1 text-[10px] text-rose-400">Remove</button>
+                      </div>
+                    </div>
+                  `).join('') + `</div>`
+            }
+          </div>
+
+          <!-- Collapsible Add Slicer / Project Version Form -->
+          <div id="addVersionBox_${m.id}" class="hidden p-3 rounded-md space-y-2.5" style="background-color: var(--surface); border: 1px solid var(--border-strong);">
+            <div class="text-xs font-semibold">Attach Additional Slicer File or Project Version</div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <label class="block text-[10px] mb-1" style="color: var(--muted);">Role / File Type</label>
+                <select id="verRoleInput_${m.id}" class="vault-input w-full px-2 py-1.5 text-xs">
+                  <option value="slicer_project">Slicer Project (.3MF)</option>
+                  <option value="gcode">Sliced G-Code (.GCODE / .BGCODE)</option>
+                  <option value="cad_revision">CAD / Parametric Revision (.F3D / .STEP)</option>
+                  <option value="mesh_variant">Mesh Variant / Remix (.STL)</option>
+                  <option value="printer_profile">Printer / Filament Profile</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[10px] mb-1" style="color: var(--muted);">Version / Printer / Profile Note</label>
+                <input id="verLabelInput_${m.id}" type="text" placeholder="e.g. Bambu P1S 0.4mm PETG v2" class="vault-input w-full px-2.5 py-1.5 text-xs" />
+              </div>
+            </div>
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+              <input id="verFileInput_${m.id}" type="file" accept=".3mf,.gcode,.gco,.bgcode,.stl,.step,.stp,.f3d,.zip,.json,.ini" class="text-xs flex-1" />
+              <label class="flex items-center gap-1.5 text-[11px] cursor-pointer" style="color: var(--muted);">
+                <input id="verUpdateSpecs_${m.id}" type="checkbox" checked />
+                Update model time/weight if sliced
+              </label>
+            </div>
+            <div id="verUploadStatus_${m.id}" class="hidden text-[11px]" style="color: var(--accent);"></div>
+            <div class="flex justify-end gap-2">
+              <button type="button" onclick="document.getElementById('addVersionBox_${m.id}').classList.add('hidden')" class="vault-btn-ghost px-2.5 py-1 text-xs">Cancel</button>
+              <button type="button" id="verSubmitBtn_${m.id}" onclick="addAdditionalModelFile('${m.id}')" class="vault-btn-primary px-3 py-1 text-xs">Upload & Attach Version</button>
+            </div>
           </div>
         </div>
 
@@ -1739,10 +2029,14 @@
       if (event) event.stopPropagation();
       const m = models.find((x) => x.id === id);
       if (!m) return;
+      const wasQueued = m.workflow.status === 'queued' || m.workflow.status === 'printing';
       m.workflow.status = m.workflow.status === 'queued' ? 'archived' : 'queued';
       if (m.workflow.status === 'queued') m.workflow.queueOrder = models.filter((x) => x.workflow.status === 'queued').length;
       saveModels();
       syncModelToFirebase(m);
+      if (wasQueued && m.workflow.status === 'archived') {
+        handleModelLeftQueueCleanup(id);
+      }
     }
 
     function moveQueueOrder(id, delta) {
@@ -1765,6 +2059,9 @@
       m.workflow.status = st;
       saveModels();
       syncModelToFirebase(m);
+      if (st === 'printed' || st === 'archived') {
+        handleModelLeftQueueCleanup(id);
+      }
     }
 
     function updatePinnedNextTime(id) {
@@ -1795,6 +2092,9 @@
       if (outcome === 'success') m.workflow.status = 'printed';
       saveModels();
       syncModelToFirebase(m);
+      if (outcome === 'success') {
+        handleModelLeftQueueCleanup(id);
+      }
     }
 
     function handleFileSelect(event) {
@@ -2281,6 +2581,7 @@
           secret,
           modelId: newModel.id,
           title: newModel.title,
+          driveFolderId: newModel.storage?.driveFolderId || null,
           fileName: file.name,
           mimeType: file.type || 'application/octet-stream',
           fileSize: file.size,
@@ -2312,6 +2613,7 @@
             secret,
             modelId: newModel.id,
             title: newModel.title,
+            driveFolderId: newModel.storage?.driveFolderId || null,
             fileName: file.name,
             mimeType: file.type || 'application/octet-stream',
             base64,
@@ -2399,13 +2701,25 @@
       const recMaterial = document.getElementById('formMaterial').value.trim();
       const targetFil = document.getElementById('formTargetFilament').value.trim();
 
+      const initialOriginalFile = pendingParsedFile
+        ? {
+            ...pendingParsedFile,
+            fileId: 'f_orig_' + modelId,
+            role: 'original',
+            isOriginal: true,
+            locked: true,
+            versionLabel: isP ? `Original CAD (${designVersion})` : 'Original Source File',
+            addedAt: new Date().toISOString().slice(0, 10)
+          }
+        : null;
+
       const newModel = {
         id: modelId,
         title,
         category,
         sourceType: st,
         shapePreset,
-        ingestionState: pendingParsedFile ? 'complete' : 'needs_files',
+        ingestionState: initialOriginalFile ? 'complete' : 'needs_files',
         customGeometry: pendingCustomGeometry || null,
         thumbnailDataUrl: pendingThumbnailDataUrl || '',
         createdAt: new Date().toISOString(),
@@ -2417,7 +2731,7 @@
           cadTool: isP ? cadTool : null,
           designVersion: isP ? designVersion : null
         },
-        files: pendingParsedFile ? [pendingParsedFile] : [],
+        files: initialOriginalFile ? [initialOriginalFile] : [],
         specs: {
           dimensionsDisplay: (document.getElementById('formDims').value.trim() || '100 × 100 × 50') + ' mm',
           estimatedPrintTimeDisplay: document.getElementById('formPrintTime').value.trim() || '1h 30m',
@@ -2493,6 +2807,7 @@
         'formTitle',
         'formCadTool',
         'formVersion',
+        'formPersonalRef',
         'formUrl',
         'formAuthor',
         'formNextTime',
@@ -2552,6 +2867,188 @@
       closeDrawer();
       saveModels();
       deleteModelFromFirebase(id);
+    }
+
+    // =========================================================================
+    // ADDITIONAL SLICER & PROJECT VERSION FILES (ADD / REMOVE / DOWNLOAD)
+    // =========================================================================
+    async function extractSliceMetadataFromFile(file, ext) {
+      const sliceSpecs = {};
+      try {
+        if (ext === 'gcode' || ext === 'gco') {
+          const text = await file.text();
+          const tMatch = text.match(/estimated printing time.*=\s*(.+)/i);
+          const wMatch = text.match(/filament used \[g\]\s*=\s*([\d.]+)/i);
+          const mMatch = text.match(/filament_type\s*=\s*([A-Za-z0-9+\-_]+)/i);
+          if (tMatch) sliceSpecs.printTime = tMatch[1].trim();
+          if (wMatch) sliceSpecs.weightGrams = parseFloat(wMatch[1]);
+          if (mMatch) sliceSpecs.material = mMatch[1];
+        } else if (ext === '3mf' && window.JSZip) {
+          const zip = await JSZip.loadAsync(file);
+          const entries = Object.keys(zip.files);
+          const sliceInfoPath = entries.find((e) => /slice_info\.config$/i.test(e));
+          if (sliceInfoPath) {
+            const xml = await zip.files[sliceInfoPath].async('string');
+            const predMatch = xml.match(/key=["']prediction["']\s+value=["'](\d+)["']/i);
+            const weightMatch = xml.match(/key=["']weight["']\s+value=["']([\d.]+)["']/i);
+            const filMatch = xml.match(/<filament[^>]+type=["']([^"']+)["']/i);
+            if (predMatch) {
+              const mins = Math.round(parseInt(predMatch[1], 10) / 60);
+              sliceSpecs.printTime = `${Math.floor(mins / 60)}h ${mins % 60}m`;
+            }
+            if (weightMatch) sliceSpecs.weightGrams = parseFloat(weightMatch[1]);
+            if (filMatch) sliceSpecs.material = filMatch[1];
+          }
+        }
+      } catch (e) {}
+      return Object.keys(sliceSpecs).length > 0 ? sliceSpecs : null;
+    }
+
+    async function addAdditionalModelFile(modelId) {
+      const m = models.find((x) => x.id === modelId);
+      if (!m) return;
+      normalizeModelFiles(m);
+
+      const fileInput = document.getElementById(`verFileInput_${modelId}`);
+      const roleSelect = document.getElementById(`verRoleInput_${modelId}`);
+      const labelInput = document.getElementById(`verLabelInput_${modelId}`);
+      const updateSpecsChk = document.getElementById(`verUpdateSpecs_${modelId}`);
+      const statusEl = document.getElementById(`verUploadStatus_${modelId}`);
+      const btn = document.getElementById(`verSubmitBtn_${modelId}`);
+
+      const file = fileInput?.files?.[0];
+      if (!file) {
+        if (statusEl) {
+          statusEl.textContent = 'Please select a slicer or project file to attach.';
+          statusEl.classList.remove('hidden');
+        }
+        return;
+      }
+
+      const ext = file.name.split('.').pop().toLowerCase();
+      const hasExistingOriginal = (m.files || []).some((f) => f.isOriginal);
+      const isOrig = !hasExistingOriginal;
+      const role = isOrig ? 'original' : (roleSelect?.value || inferFileRole(ext, false));
+      const versionLabel = (labelInput?.value || '').trim() || (isOrig ? 'Original Source File' : fileRoleDisplayLabel(role, ext));
+      const sliceSpecs = await extractSliceMetadataFromFile(file, ext);
+
+      const newFileEntry = {
+        fileId: (isOrig ? 'f_orig_' : 'f_ver_') + modelId + '_' + Math.random().toString(36).slice(2, 7),
+        fileName: file.name,
+        extension: ext,
+        sizeBytes: file.size,
+        role,
+        isOriginal: isOrig,
+        locked: isOrig,
+        versionLabel,
+        addedAt: new Date().toISOString().slice(0, 10),
+        sliceSpecs
+      };
+
+      if (sliceSpecs && updateSpecsChk?.checked) {
+        m.specs = m.specs || {};
+        if (sliceSpecs.printTime) m.specs.estimatedPrintTimeDisplay = sliceSpecs.printTime;
+        if (sliceSpecs.weightGrams) m.specs.filamentWeightGrams = sliceSpecs.weightGrams;
+        if (sliceSpecs.material) m.specs.recommendedMaterial = sliceSpecs.material;
+      }
+
+      if (btn) btn.disabled = true;
+      if (statusEl) statusEl.classList.remove('hidden');
+
+      try {
+        if (cloudConfig.gasUrl) {
+          const uploadRes = await uploadFileToDrive(file, m, (msg) => {
+            if (statusEl) statusEl.textContent = msg;
+            if (btn) btn.textContent = msg;
+          });
+          if (uploadRes.ok && uploadRes.driveFileId) {
+            newFileEntry.driveFileId = uploadRes.driveFileId;
+            m.storage = {
+              ...(m.storage || {}),
+              driveFolderId: uploadRes.driveFolderId,
+              driveFolderUrl: uploadRes.driveFolderUrl
+            };
+          }
+        }
+
+        m.files = m.files || [];
+        m.files.push(newFileEntry);
+        m.ingestionState = 'complete';
+        saveModels();
+        await syncModelToFirebase(m);
+      } catch (err) {
+        if (statusEl) statusEl.textContent = `Upload warning (${err.message}); attached metadata locally.`;
+        m.files = m.files || [];
+        m.files.push(newFileEntry);
+        saveModels();
+        await syncModelToFirebase(m);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Upload & Attach Version';
+        }
+      }
+    }
+
+    async function removeAdditionalModelFile(modelId, fileId) {
+      const m = models.find((x) => x.id === modelId);
+      if (!m) return;
+      normalizeModelFiles(m);
+
+      const target = (m.files || []).find((f) => f.fileId === fileId);
+      if (!target) return;
+
+      // Guardrail: Original file is non-perishable and cannot be removed
+      if (target.isOriginal || target.locked || target.role === 'original') {
+        alert('The original source file is a non-perishable part of this model record and cannot be removed.');
+        return;
+      }
+
+      m.files = (m.files || []).filter((f) => f.fileId !== fileId);
+      saveModels();
+      syncModelToFirebase(m);
+
+      // If stored in Google Drive, move the supplementary file to Drive trash
+      if (target.driveFileId && cloudConfig.gasUrl) {
+        try {
+          await fetch(cloudConfig.gasUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({
+              action: 'trashFile',
+              secret: cloudConfig.apiSecret || '',
+              driveFileId: target.driveFileId
+            })
+          });
+        } catch (e) {
+          console.warn('Could not trash Drive version file:', e);
+        }
+      }
+    }
+
+    async function downloadVaultFile(modelId, fileId) {
+      const m = models.find((x) => x.id === modelId);
+      if (!m) return;
+      const target = (m.files || []).find((f) => f.fileId === fileId);
+      if (!target || !target.driveFileId || !cloudConfig.gasUrl) return;
+
+      try {
+        const sep = cloudConfig.gasUrl.includes('?') ? '&' : '?';
+        const sec = cloudConfig.apiSecret ? `&secret=${encodeURIComponent(cloudConfig.apiSecret)}` : '';
+        const res = await fetch(`${cloudConfig.gasUrl}${sep}action=getFile&driveFileId=${encodeURIComponent(target.driveFileId)}${sec}`);
+        const data = await res.json();
+        if (!data.ok || !data.base64) throw new Error(data.error || 'Could not download file');
+        const bin = atob(data.base64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const blob = new Blob([bytes], { type: data.mimeType || 'application/octet-stream' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = target.fileName || data.fileName || 'model.stl';
+        a.click();
+      } catch (err) {
+        alert(`Download failed: ${err.message}`);
+      }
     }
 
     // =========================================================================
@@ -3520,11 +4017,517 @@
       });
     }
 
+    // =========================================================================
+    // PHASE 2: LOCAL PRINT QUEUE WORKING FOLDER, DOWNLOAD & CLEANUP
+    // =========================================================================
+    const FS_IDB_NAME = '3d_model_vault_fs_db';
+    const FS_IDB_STORE = 'handles';
+
+    function loadLocalStageManifest() {
+      try {
+        const raw = localStorage.getItem(LOCAL_STAGE_KEY);
+        localStageManifest = raw ? JSON.parse(raw) : {};
+      } catch (e) {
+        localStageManifest = {};
+      }
+    }
+
+    function saveLocalStageManifest() {
+      try {
+        localStorage.setItem(LOCAL_STAGE_KEY, JSON.stringify(localStageManifest));
+      } catch (e) {}
+    }
+
+    function openFsIdb() {
+      return new Promise((resolve, reject) => {
+        if (!window.indexedDB) return reject(new Error('IndexedDB unavailable'));
+        const req = indexedDB.open(FS_IDB_NAME, 1);
+        req.onupgradeneeded = () => {
+          if (!req.result.objectStoreNames.contains(FS_IDB_STORE)) {
+            req.result.createObjectStore(FS_IDB_STORE);
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function persistDirHandle(handle) {
+      try {
+        const db = await openFsIdb();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction(FS_IDB_STORE, 'readwrite');
+          tx.objectStore(FS_IDB_STORE).put(handle, 'queueWorkingDir');
+          tx.oncomplete = resolve;
+          tx.onerror = () => reject(tx.error);
+        });
+      } catch (e) {}
+    }
+
+    async function loadPersistedDirHandle() {
+      try {
+        const db = await openFsIdb();
+        return await new Promise((resolve) => {
+          const tx = db.transaction(FS_IDB_STORE, 'readonly');
+          const req = tx.objectStore(FS_IDB_STORE).get('queueWorkingDir');
+          req.onsuccess = () => resolve(req.result || null);
+          req.onerror = () => resolve(null);
+        });
+      } catch (e) {
+        return null;
+      }
+    }
+
+    async function clearPersistedDirHandle() {
+      try {
+        const db = await openFsIdb();
+        await new Promise((resolve) => {
+          const tx = db.transaction(FS_IDB_STORE, 'readwrite');
+          tx.objectStore(FS_IDB_STORE).delete('queueWorkingDir');
+          tx.oncomplete = resolve;
+          tx.onerror = resolve;
+        });
+      } catch (e) {}
+    }
+
+    async function restoreLocalWorkingFolderHandle() {
+      loadLocalStageManifest();
+      if (!('showDirectoryPicker' in window)) return;
+      const saved = await loadPersistedDirHandle();
+      if (!saved) return;
+      localDirName = saved.name || 'Print Queue Folder';
+      try {
+        const perm = await saved.queryPermission({ mode: 'readwrite' });
+        if (perm === 'granted') {
+          localDirHandle = saved;
+          localDirNeedsReauth = false;
+        } else {
+          localDirHandle = null;
+          localDirNeedsReauth = true;
+        }
+      } catch (e) {
+        localDirHandle = null;
+        localDirNeedsReauth = false;
+      }
+      renderAll();
+    }
+
+    function showLocalQueueStatus(msg) {
+      const el = document.getElementById('localQueueStatusMsg');
+      if (!el) return;
+      el.textContent = msg;
+      el.classList.remove('hidden');
+    }
+
+    async function linkLocalWorkingFolder() {
+      if (!('showDirectoryPicker' in window)) {
+        showLocalQueueStatus('Direct local folder sync requires a Chromium-based browser (Chrome, Edge, Brave). You can still use the Download buttons to save files locally.');
+        return;
+      }
+      try {
+        const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+        localDirHandle = handle;
+        localDirName = handle.name;
+        localDirNeedsReauth = false;
+        await persistDirHandle(handle);
+        renderAll();
+        showLocalQueueStatus(`Linked local working folder: "${handle.name}". Click "Sync Queue to Folder" to stage queued models.`);
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          showLocalQueueStatus(`Could not link folder: ${err.message}`);
+        }
+      }
+    }
+
+    async function reauthorizeLocalWorkingFolder() {
+      const saved = await loadPersistedDirHandle();
+      if (!saved) {
+        await linkLocalWorkingFolder();
+        return;
+      }
+      try {
+        const perm = await saved.requestPermission({ mode: 'readwrite' });
+        if (perm === 'granted') {
+          localDirHandle = saved;
+          localDirName = saved.name;
+          localDirNeedsReauth = false;
+          renderAll();
+          showLocalQueueStatus(`Re-authorized local working folder: "${saved.name}".`);
+        }
+      } catch (err) {
+        showLocalQueueStatus(`Re-authorization failed: ${err.message}`);
+      }
+    }
+
+    async function unlinkLocalWorkingFolder() {
+      localDirHandle = null;
+      localDirName = '';
+      localDirNeedsReauth = false;
+      await clearPersistedDirHandle();
+      const gBox = document.getElementById('localCleanupGuardrailBox');
+      if (gBox) gBox.classList.add('hidden');
+      renderAll();
+      showLocalQueueStatus('Unlinked local working folder. Master files in Google Drive are untouched.');
+    }
+
+    function getFinishedStagedModelIds() {
+      return Object.keys(localStageManifest).filter((id) => {
+        const m = models.find((x) => x.id === id);
+        return !m || (m.workflow.status !== 'queued' && m.workflow.status !== 'printing');
+      });
+    }
+
+    function renderLocalQueueWorkspaceBar(queuedModels) {
+      const bar = document.getElementById('localQueueWorkspaceBar');
+      if (!bar) return;
+
+      const fsSupported = 'showDirectoryPicker' in window;
+      const stagedCount = Object.keys(localStageManifest).length;
+      const finishedIds = getFinishedStagedModelIds();
+
+      bar.innerHTML = `
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div class="space-y-0.5">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-xs font-bold">Phase 2 · Local Print Working Folder</span>
+              ${
+                localDirHandle
+                  ? `<span class="text-[11px] font-mono px-2 py-0.5 rounded" style="background-color: var(--accent-soft); color: var(--accent);">📁 ${localDirName}</span>`
+                  : localDirNeedsReauth
+                    ? `<span class="text-[11px] font-mono px-2 py-0.5 rounded" style="background-color: var(--brass-soft); color: var(--brass);">🔒 Re-authorize "${localDirName}"</span>`
+                    : `<span class="text-[11px]" style="color: var(--muted);">Not linked (downloads go to browser Downloads)</span>`
+              }
+            </div>
+            <p class="text-[11px]" style="color: var(--muted);">
+              Stage queued models & slicer files into a dedicated local folder for printing, then auto-clean finished prints while keeping master copies in the cloud vault.
+              ${stagedCount > 0 ? ` · <strong>${stagedCount}</strong> staged` : ''}
+              ${finishedIds.length > 0 ? ` · <span style="color: var(--brass);">${finishedIds.length} finished & ready to clean</span>` : ''}
+            </p>
+          </div>
+
+          <div class="flex items-center gap-2 flex-wrap shrink-0">
+            ${
+              localDirHandle
+                ? `<button onclick="syncQueueToLocalFolder()" class="vault-btn-primary px-3 py-1.5 text-xs">Sync Queue (${queuedModels.length})</button>
+                   <button onclick="cleanUpFinishedLocalFolders()" class="vault-btn-ghost px-3 py-1.5 text-xs">Clean Up Finished (${finishedIds.length})</button>
+                   <button onclick="unlinkLocalWorkingFolder()" class="vault-btn-ghost px-2.5 py-1.5 text-xs">Unlink</button>`
+                : localDirNeedsReauth
+                  ? `<button onclick="reauthorizeLocalWorkingFolder()" class="vault-btn-primary px-3 py-1.5 text-xs">Re-authorize "${localDirName}"</button>
+                     <button onclick="unlinkLocalWorkingFolder()" class="vault-btn-ghost px-2.5 py-1.5 text-xs">Unlink</button>`
+                  : `<button onclick="linkLocalWorkingFolder()" class="vault-btn-primary px-3 py-1.5 text-xs">${fsSupported ? '📁 Link Working Folder' : 'Folder Sync Info'}</button>`
+            }
+          </div>
+        </div>
+      `;
+    }
+
+    async function fetchModelDriveFileBytes(fileEntry) {
+      if (!fileEntry?.driveFileId || !cloudConfig.gasUrl) return null;
+      const sep = cloudConfig.gasUrl.includes('?') ? '&' : '?';
+      const sec = cloudConfig.apiSecret ? `&secret=${encodeURIComponent(cloudConfig.apiSecret)}` : '';
+      const res = await fetch(`${cloudConfig.gasUrl}${sep}action=getFile&driveFileId=${encodeURIComponent(fileEntry.driveFileId)}${sec}`);
+      const data = await res.json();
+      if (!data.ok || !data.base64) throw new Error(data.error || 'Empty file response');
+      const bin = atob(data.base64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return { bytes, mimeType: data.mimeType || 'application/octet-stream' };
+    }
+
+    function buildPrintNotesText(m) {
+      return [
+        `3D MODEL VAULT — LOCAL PRINT WORKSPACE`,
+        `Title: ${m.title}`,
+        `Model ID: ${m.id}`,
+        `Category: ${m.category || 'Uncategorized'}`,
+        `Source: ${m.source?.url || originText(m)}`,
+        `Filament: ${formatFilamentSummary(m)}`,
+        `Est. Time: ${m.specs?.estimatedPrintTimeDisplay || '—'} · Weight: ${m.specs?.filamentWeightGrams || '—'}g`,
+        ``,
+        `--- FOR NEXT TIME / SLICER NOTES ---`,
+        m.nextTimeSummary || '(none)',
+        ``
+      ].join('\n');
+    }
+
+    async function pullModelForPrinting(modelId, silent = false) {
+      const m = models.find((x) => x.id === modelId);
+      if (!m) return;
+      normalizeModelFiles(m);
+
+      const driveFiles = (m.files || []).filter((f) => f.driveFileId);
+
+      // Path A: Stage directly into the linked Local Working Folder
+      if (localDirHandle) {
+        if (!silent) showLocalQueueStatus(`Staging "${m.title}" into "${localDirName}"...`);
+        const slug = (m.title || 'model').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) || 'model';
+        const orderPrefix = String(m.workflow?.queueOrder || 99).padStart(2, '0');
+        const folderName = `${orderPrefix}_${slug}_${m.id}`;
+
+        try {
+          const subDir = await localDirHandle.getDirectoryHandle(folderName, { create: true });
+          const stagedFileRecords = [];
+
+          // Write PRINT_NOTES.txt
+          const notesHandle = await subDir.getFileHandle('PRINT_NOTES.txt', { create: true });
+          const notesWritable = await notesHandle.createWritable();
+          await notesWritable.write(buildPrintNotesText(m));
+          await notesWritable.close();
+
+          let downloadedCount = 0;
+          for (const f of driveFiles) {
+            try {
+              const fetched = await fetchModelDriveFileBytes(f);
+              if (fetched) {
+                const fh = await subDir.getFileHandle(f.fileName, { create: true });
+                const writable = await fh.createWritable();
+                await writable.write(fetched.bytes);
+                await writable.close();
+                const fileObj = await fh.getFile();
+                stagedFileRecords.push({
+                  fileName: f.fileName,
+                  sizeBytes: fileObj.size,
+                  lastModified: fileObj.lastModified
+                });
+                downloadedCount++;
+              }
+            } catch (err) {
+              console.warn(`Could not fetch ${f.fileName}:`, err);
+            }
+          }
+
+          localStageManifest[m.id] = {
+            folderName,
+            stagedAt: Date.now(),
+            files: stagedFileRecords
+          };
+          saveLocalStageManifest();
+          renderAll();
+
+          if (!silent) {
+            showLocalQueueStatus(
+              downloadedCount > 0
+                ? `Staged "${m.title}" (${downloadedCount} file(s) + PRINT_NOTES.txt) in "${localDirName}/${folderName}".`
+                : `Created workspace folder "${localDirName}/${folderName}" with PRINT_NOTES.txt (no Drive binaries linked to this record).`
+            );
+          }
+          return true;
+        } catch (err) {
+          if (!silent) showLocalQueueStatus(`Failed to stage "${m.title}": ${err.message}`);
+          return false;
+        }
+      }
+
+      // Path B: Fallback direct browser download (ZIP if multiple files, single file otherwise)
+      if (driveFiles.length === 0) {
+        const blob = new Blob([buildPrintNotesText(m)], { type: 'text/plain' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${m.id}_PRINT_NOTES.txt`;
+        a.click();
+        showLocalQueueStatus(`No Drive binaries attached to "${m.title}". Downloaded PRINT_NOTES.txt.`);
+        return false;
+      }
+
+      showLocalQueueStatus(`Downloading ${driveFiles.length} file(s) for "${m.title}"...`);
+      try {
+        if (driveFiles.length === 1) {
+          await downloadVaultFile(m.id, driveFiles[0].fileId);
+        } else if (window.JSZip) {
+          const zip = new JSZip();
+          zip.file('PRINT_NOTES.txt', buildPrintNotesText(m));
+          for (const f of driveFiles) {
+            const fetched = await fetchModelDriveFileBytes(f);
+            if (fetched) zip.file(f.fileName, fetched.bytes);
+          }
+          const blob = await zip.generateAsync({ type: 'blob' });
+          const slug = (m.title || 'model').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 36);
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = `${slug}_${m.id}.zip`;
+          a.click();
+        } else {
+          for (const f of driveFiles) {
+            await downloadVaultFile(m.id, f.fileId);
+          }
+        }
+        showLocalQueueStatus(`Downloaded print files for "${m.title}".`);
+      } catch (err) {
+        showLocalQueueStatus(`Download failed: ${err.message}`);
+      }
+      return true;
+    }
+
+    async function syncQueueToLocalFolder() {
+      if (!localDirHandle) {
+        await linkLocalWorkingFolder();
+        if (!localDirHandle) return;
+      }
+      const queued = models.filter((m) => m.workflow.status === 'queued' || m.workflow.status === 'printing');
+      if (queued.length === 0) {
+        showLocalQueueStatus('Print queue is empty — nothing to stage.');
+        return;
+      }
+      showLocalQueueStatus(`Syncing ${queued.length} queued model(s) into "${localDirName}"...`);
+      let okCount = 0;
+      for (const m of queued) {
+        const res = await pullModelForPrinting(m.id, true);
+        if (res) okCount++;
+      }
+      showLocalQueueStatus(`Synced ${okCount} of ${queued.length} queued model(s) to "${localDirName}".`);
+    }
+
+    async function inspectLocalFolderEdits(modelId) {
+      const entry = localStageManifest[modelId];
+      if (!entry || !localDirHandle) return { exists: false, editedFiles: [] };
+      try {
+        const subDir = await localDirHandle.getDirectoryHandle(entry.folderName);
+        const recordedMap = {};
+        (entry.files || []).forEach((rf) => { recordedMap[rf.fileName] = rf; });
+        const editedFiles = [];
+
+        for await (const [name, handle] of subDir.entries()) {
+          if (handle.kind !== 'file' || name === 'PRINT_NOTES.txt') continue;
+          const fileObj = await handle.getFile();
+          const rec = recordedMap[name];
+          if (!rec) {
+            editedFiles.push({ name, reason: 'new_local_file', file: fileObj });
+          } else if (fileObj.lastModified > rec.lastModified + 2000 || fileObj.size !== rec.sizeBytes) {
+            editedFiles.push({ name, reason: 'modified_locally', file: fileObj });
+          }
+        }
+        return { exists: true, editedFiles };
+      } catch (e) {
+        return { exists: false, editedFiles: [] };
+      }
+    }
+
+    let pendingEditedLocalFiles = {};
+
+    async function cleanLocalModelFolder(modelId, forceDiscard = false) {
+      const entry = localStageManifest[modelId];
+      if (!entry) return;
+      if (!localDirHandle) {
+        delete localStageManifest[modelId];
+        saveLocalStageManifest();
+        renderAll();
+        return;
+      }
+
+      if (!forceDiscard) {
+        const check = await inspectLocalFolderEdits(modelId);
+        if (check.exists && check.editedFiles.length > 0) {
+          const m = models.find((x) => x.id === modelId);
+          pendingEditedLocalFiles[modelId] = check.editedFiles;
+          const gBox = document.getElementById('localCleanupGuardrailBox');
+          if (gBox) {
+            gBox.classList.remove('hidden');
+            gBox.innerHTML = `
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div class="space-y-1">
+                  <div class="font-bold">⚠ Unsaved Local Slicer Edits Detected for "${m?.title || modelId}"</div>
+                  <p style="color: var(--muted);">
+                    Found new or modified local file(s) in <code>${entry.folderName}</code>:
+                    <strong style="color: var(--text);">${check.editedFiles.map((f) => f.name).join(', ')}</strong>.
+                    Save them back to your cloud vault before deleting the local copy?
+                  </p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0 flex-wrap">
+                  <button onclick="uploadEditedLocalFilesAndClean('${modelId}')" class="vault-btn-primary px-3 py-1.5 text-xs">Upload to Vault & Clean</button>
+                  <button onclick="cleanLocalModelFolder('${modelId}', true)" class="vault-btn-ghost px-3 py-1.5 text-xs text-rose-400">Discard Local & Clean</button>
+                  <button onclick="document.getElementById('localCleanupGuardrailBox').classList.add('hidden')" class="vault-btn-ghost px-2.5 py-1.5 text-xs">Keep Local</button>
+                </div>
+              </div>
+            `;
+          }
+          return false;
+        }
+      }
+
+      try {
+        await localDirHandle.removeEntry(entry.folderName, { recursive: true });
+      } catch (e) {}
+      delete localStageManifest[modelId];
+      delete pendingEditedLocalFiles[modelId];
+      saveLocalStageManifest();
+      const gBox = document.getElementById('localCleanupGuardrailBox');
+      if (gBox) gBox.classList.add('hidden');
+      renderAll();
+      return true;
+    }
+
+    async function uploadEditedLocalFilesAndClean(modelId) {
+      const m = models.find((x) => x.id === modelId);
+      const edited = pendingEditedLocalFiles[modelId] || [];
+      if (!m || edited.length === 0) {
+        await cleanLocalModelFolder(modelId, true);
+        return;
+      }
+
+      showLocalQueueStatus(`Uploading ${edited.length} updated local file(s) back to vault for "${m.title}"...`);
+      for (const item of edited) {
+        const file = item.file;
+        const ext = file.name.split('.').pop().toLowerCase();
+        const role = inferFileRole(ext, false);
+        const sliceSpecs = await extractSliceMetadataFromFile(file, ext);
+        const newEntry = {
+          fileId: 'f_ver_' + modelId + '_' + Math.random().toString(36).slice(2, 7),
+          fileName: file.name,
+          extension: ext,
+          sizeBytes: file.size,
+          role,
+          isOriginal: false,
+          locked: false,
+          versionLabel: 'Local Slicer Update (' + new Date().toISOString().slice(0, 10) + ')',
+          addedAt: new Date().toISOString().slice(0, 10),
+          sliceSpecs
+        };
+        if (cloudConfig.gasUrl) {
+          try {
+            const up = await uploadFileToDrive(file, m, (msg) => showLocalQueueStatus(msg));
+            if (up.ok && up.driveFileId) newEntry.driveFileId = up.driveFileId;
+          } catch (e) {}
+        }
+        m.files = m.files || [];
+        m.files.push(newEntry);
+      }
+      saveModels();
+      await syncModelToFirebase(m);
+      await cleanLocalModelFolder(modelId, true);
+      showLocalQueueStatus(`Saved ${edited.length} edited file(s) to vault and cleaned local working folder.`);
+    }
+
+    async function handleModelLeftQueueCleanup(modelId) {
+      if (!localStageManifest[modelId]) return;
+      const cleaned = await cleanLocalModelFolder(modelId, false);
+      if (cleaned) {
+        const m = models.find((x) => x.id === modelId);
+        showLocalQueueStatus(`Cleaned up local working folder for "${m?.title || modelId}" (master copy preserved in vault).`);
+      }
+    }
+
+    async function cleanUpFinishedLocalFolders() {
+      const finishedIds = getFinishedStagedModelIds();
+      if (finishedIds.length === 0) {
+        showLocalQueueStatus('No finished or unqueued local folders to clean.');
+        return;
+      }
+      let cleanedCount = 0;
+      for (const id of finishedIds) {
+        const ok = await cleanLocalModelFolder(id, false);
+        if (ok) cleanedCount++;
+      }
+      if (cleanedCount > 0) {
+        showLocalQueueStatus(`Cleaned ${cleanedCount} finished local working folder(s). Master files remain safely in the vault.`);
+      }
+    }
+
     window.addEventListener('DOMContentLoaded', async () => {
       loadState();
       initThreeViewer();
       setupDragAndDrop();
       setupBookmarklet();
+      await restoreLocalWorkingFolderHandle();
       if (!handleBookmarkletParams()) {
         switchTab('library');
       }

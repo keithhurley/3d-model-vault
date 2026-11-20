@@ -1,7 +1,7 @@
 # 3D Model Vault — Future Additions & Phase 2 TODO
 
 > [!NOTE]
-> Items **#4, #5, #6, #8, and #9 (QA/QC File-Metadata Reconciliation)** have been implemented in `index.html` and `backend/Code.gs`. Remaining items are queued for future implementation.
+> Items **#2, #4, #5, #6, #8, and #9 (QA/QC File-Metadata Reconciliation)** have been implemented in `index.html` and `backend/Code.gs`. Remaining items are queued for future implementation.
 
 ---
 
@@ -12,21 +12,19 @@
   - Incremental local mirror / secondary cloud backup so large libraries don't require re-downloading everything each time.
   - Restore / import verification path to confirm a backup can rebuild both Drive files and Firebase links.
 
-## 2. Slicer File Storage & Print-Ready Assets
-- [ ] **Evaluate what slicer files are needed for printing:** Identify which artifacts add real value to store alongside raw `STL`s (e.g., `.3mf` slicer project files with supports/orientation/plate layouts, `.gcode` / `.bgcode`, or exported printer/filament profiles).
-- [ ] **Attach slicer files to model records:** Support storing multiple slicer/output variants under a single model (e.g., tagged by printer, nozzle size, material, or date).
-- [ ] **Surface slicer metadata in the UI (optional):** Extract/display useful details like estimated print time, filament usage, or layer height when available.
+## 2. Slicer File Storage & Print-Ready Assets ✅ *(Completed)*
+- [x] **Non-perishable original file protection:** The primary ingested file (`isOriginal: true`, `locked: true`) is permanently locked as a non-perishable part of the model record (`🔒 ORIGINAL` badge on cards and `Protected` in the slideout drawer).
+- [x] **Add & remove slicer files and project versions:** Users can attach and remove supplementary files (Slicer Project `.3MF`, Sliced `.GCODE`/`.BGCODE`, CAD Revisions `.F3D`/`.STEP`, Mesh Variants `.STL`, Printer Profiles) with custom version/printer notes and optional Google Drive trash sync (`action=trashFile`).
+- [x] **Surface slicer metadata & file badges on cards and slideout drawer:** Library and Queue cards display distinct `🔒 <EXT>` + `+<N> <EXT>` version badges, and the slideout drawer lists each file's role, version note, and extracted print time / filament weight / material.
 
-## 3. Phase 2: Local Print Queue Workflow & Cleanup
+## 3. Phase 2: Local Print Queue Workflow & Cleanup ✅ *(Completed)*
 *Turning the vault from a cloud archive into an active day-to-day printing workspace on the computer.*
 
-- [ ] **Download for printing:** Simple action to pull a model (and its associated slicer/project files) down to the local computer when ready to slice or print.
-- [ ] **Local working queue folder:** Maintain a dedicated local folder for models currently in `queued` / `printing` status so the slicer can open them directly without manual hunting.
-- [ ] **Cleanup & post-print removal:**
-  - Functions to delete/purge local working files after a print finishes (`printed`) or when removed from the queue, keeping the local drive tidy while preserving everything in the cloud vault.
-  - Guardrails against accidental deletion of unsaved local slicer edits (e.g., prompt or upload updated `.3mf`/slicer file back to the vault before local cleanup).
-- [ ] **Evaluate local folder integration approach:**
-  - Browser File System Access API (zero-install, user grants folder permission in Chromium browsers) vs. a lightweight local companion script/agent for automated sync and cleanup.
+- [x] **Download for printing:** Added 1-click **`⬇ Download All`** / **`⬇ Stage for Print`** in the slideout drawer and **`⬇ Stage`** / **`⬇ Download`** on Print Queue rows (bundles multi-file records into a `.zip` with `PRINT_NOTES.txt` when no local folder is linked).
+- [x] **Local working queue folder:** Integrated the Browser File System Access API (`showDirectoryPicker`) with IndexedDB handle persistence so Chromium browsers can link a dedicated local working folder and sync `queued` / `printing` models into `NN_<slug>_<id>/` subfolders.
+- [x] **Cleanup & post-print removal:**
+  - Automatic and manual cleanup (`Clean Up Finished`, per-item `🧹`, and auto-clean on `Done` / unqueue) removes local working folders while preserving master files in Google Drive.
+  - Guardrails detect new or modified local slicer files (`lastModified` / size / new file check) and prompt to **Upload to Vault & Clean** or **Discard Local & Clean** before deleting.
 
 ## 4. Model Pictures & Thumbnail Backfill ✅ *(Completed)*
 - [x] **Audit existing downloads for missing pictures:** Added detection on Library cards and in the **QA/QC** tab for any model lacking a preview picture.

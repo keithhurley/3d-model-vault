@@ -103,6 +103,10 @@ function doPost(e) {
       return jsonResponse_(handleAuditDrive_());
     }
 
+    if (action === 'trashFile') {
+      return jsonResponse_(handleTrashFile_(payload));
+    }
+
     if (action === 'saveMetadata') {
       const record = payload.model;
       if (!record || !record.id) {
@@ -116,6 +120,23 @@ function doPost(e) {
   } catch (err) {
     return jsonResponse_({ ok: false, error: err.message });
   }
+}
+
+/**
+ * Moves a supplementary/slicer Drive file to trash when removed from a model record.
+ */
+function handleTrashFile_(payload) {
+  const driveFileId = (payload.driveFileId || '').trim();
+  if (!driveFileId) {
+    return { ok: false, error: 'Missing driveFileId' };
+  }
+  const file = DriveApp.getFileById(driveFileId);
+  file.setTrashed(true);
+  return {
+    ok: true,
+    driveFileId: driveFileId,
+    trashed: true
+  };
 }
 
 // ============================================================================
