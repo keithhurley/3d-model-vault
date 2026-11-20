@@ -165,6 +165,9 @@
         <button onclick="switchTab('ingest')" id="tab-ingest" class="px-3 py-1.5 text-xs font-semibold rounded-md transition">
           + Add
         </button>
+        <button onclick="switchTab('qa')" id="tab-qa" class="px-3 py-1.5 text-xs font-semibold rounded-md transition">
+          QA/QC <span id="count-qa" class="ml-1 opacity-70 font-mono">0</span>
+        </button>
         <button onclick="switchTab('settings')" id="tab-settings" class="px-3 py-1.5 text-xs font-semibold rounded-md transition">
           Setup
         </button>
@@ -183,15 +186,19 @@
           id="searchInput"
           type="text"
           oninput="renderAll()"
-          placeholder="Search models, filaments, or notes..."
+          placeholder="Search models, categories, filaments, or notes..."
           class="vault-input flex-1 min-w-[200px] px-3.5 py-2 text-xs"
         />
+        <select id="filterCategory" onchange="renderAll()" class="vault-input px-3 py-2 text-xs">
+          <option value="all">All Categories</option>
+        </select>
         <select id="filterSource" onchange="renderAll()" class="vault-input px-3 py-2 text-xs">
           <option value="all">All Sources</option>
           <option value="personal">Personal CAD</option>
           <option value="makerworld">MakerWorld</option>
           <option value="printables">Printables</option>
           <option value="thingiverse">Thingiverse</option>
+          <option value="other">Other</option>
         </select>
         <select id="filterStatus" onchange="renderAll()" class="vault-input px-3 py-2 text-xs">
           <option value="all">All Statuses</option>
@@ -200,6 +207,7 @@
           <option value="printing">Printing</option>
           <option value="printed">Printed</option>
           <option value="archived">Archived</option>
+          <option value="needs_attention">⚠ Needs QA/QC</option>
         </select>
       </div>
 
@@ -258,10 +266,14 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-          <div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+          <div class="sm:col-span-1">
             <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Title</label>
-            <input id="formTitle" type="text" placeholder="Gridfinity Pliers Holder" class="vault-input w-full px-3 py-2 text-xs" />
+            <input id="formTitle" type="text" oninput="autoSuggestCategoryFromTitle()" placeholder="Gridfinity Pliers Holder" class="vault-input w-full px-3 py-2 text-xs" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Category</label>
+            <select id="formCategory" class="vault-input w-full px-3 py-2 text-xs"></select>
           </div>
           <div>
             <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Source</label>
@@ -274,7 +286,7 @@
             </select>
           </div>
 
-          <div id="personalSourceGroup" class="sm:col-span-2 grid grid-cols-2 gap-3">
+          <div id="personalSourceGroup" class="sm:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label class="block text-xs font-medium mb-1" style="color: var(--muted);">CAD Tool</label>
               <input id="formCadTool" type="text" placeholder="Fusion 360" class="vault-input w-full px-3 py-1.5 text-xs" />
@@ -283,12 +295,16 @@
               <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Version</label>
               <input id="formVersion" type="text" placeholder="v1.0" class="vault-input w-full px-3 py-1.5 text-xs font-mono" />
             </div>
+            <div>
+              <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Origin Reference / Project URL</label>
+              <input id="formPersonalRef" type="text" placeholder="Local CAD / Git / Onshape link" class="vault-input w-full px-3 py-1.5 text-xs" />
+            </div>
           </div>
 
-          <div id="externalSourceGroup" class="hidden sm:col-span-2 grid grid-cols-2 gap-3">
+          <div id="externalSourceGroup" class="hidden sm:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Page URL</label>
-              <input id="formUrl" type="url" oninput="autoDetectSourceFromUrl()" placeholder="https://..." class="vault-input w-full px-3 py-1.5 text-xs" />
+              <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Source URL / Reference <span style="color: var(--accent);">*</span></label>
+              <input id="formUrl" type="url" oninput="autoDetectSourceFromUrl()" placeholder="https://makerworld.com/en/models/..." class="vault-input w-full px-3 py-1.5 text-xs" />
             </div>
             <div>
               <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Author</label>
@@ -320,8 +336,8 @@
               <input id="formWeight" type="number" step="0.1" placeholder="68.4" class="vault-input w-full px-2.5 py-1.5 text-xs font-mono" />
             </div>
             <div>
-              <label class="block text-[11px] mb-1" style="color: var(--muted);">Material</label>
-              <input id="formMaterial" type="text" placeholder="PETG" class="vault-input w-full px-2.5 py-1.5 text-xs" />
+              <label class="block text-[11px] mb-1" style="color: var(--muted);">Material Type</label>
+              <input id="formMaterial" type="text" placeholder="PETG / PLA / ASA" class="vault-input w-full px-2.5 py-1.5 text-xs" />
             </div>
             <div class="col-span-2">
               <label class="block text-[11px] mb-1" style="color: var(--muted);">Add to</label>
@@ -332,11 +348,13 @@
               </select>
             </div>
             <div class="col-span-2">
-              <label class="block text-[11px] mb-1" style="color: var(--muted);">Target Filament</label>
-              <input id="formTargetFilament" type="text" placeholder="PETG Dark Grey" class="vault-input w-full px-2.5 py-1.5 text-xs" />
+              <label class="block text-[11px] mb-1" style="color: var(--muted);">Target Filament Spool (Optional)</label>
+              <input id="formTargetFilament" type="text" placeholder="e.g. Polymaker PETG Dark Grey" class="vault-input w-full px-2.5 py-1.5 text-xs" />
             </div>
           </div>
         </div>
+
+        <div id="ingestFormAlert" class="hidden text-xs px-3 py-2 rounded-lg" style="background-color: var(--brass-soft); border: 1px solid var(--brass); color: var(--brass);"></div>
 
         <div class="flex items-center justify-end gap-2.5 pt-1">
           <button id="resetIngestFormBtn" type="button" onclick="resetIngestForm()" class="vault-btn-ghost px-4 py-2 text-xs font-medium">
@@ -349,7 +367,42 @@
       </div>
     </section>
 
-    <!-- TAB 5: SETUP -->
+    <!-- TAB 5: QA/QC AUDIT & INTEGRITY -->
+    <section id="view-qa" class="hidden space-y-5">
+      <div class="vault-card p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div class="space-y-1">
+          <h2 class="text-sm font-bold">Vault QA/QC & File-Metadata Integrity</h2>
+          <p class="text-xs" style="color: var(--muted);">
+            Audit and resolve missing preview pictures, missing source references/URLs, uncategorized models, metadata missing associated files, and orphaned files without metadata.
+          </p>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap shrink-0">
+          <button onclick="batchGenerateMissingPictures()" class="vault-btn-primary px-3 py-1.5 text-xs">
+            Auto-Generate Missing Pictures
+          </button>
+          <button onclick="batchAutoCategorizeModels()" class="vault-btn-ghost px-3 py-1.5 text-xs">
+            Auto-Categorize All
+          </button>
+          <button onclick="document.getElementById('qaLocalOrphanInput').click()" class="vault-btn-ghost px-3 py-1.5 text-xs">
+            Scan Local Folder / Files
+          </button>
+          <input id="qaLocalOrphanInput" type="file" multiple accept=".stl,.gcode,.gco,.3mf,.zip,.step,.f3d" class="hidden" onchange="handleLocalOrphanFileScan(event)" />
+          <button id="qaDriveScanBtn" onclick="runDriveOrphanScan()" class="vault-btn-ghost px-3 py-1.5 text-xs">
+            Scan Google Drive
+          </button>
+        </div>
+      </div>
+
+      <div id="qaActionStatus" class="hidden vault-card px-4 py-2.5 text-xs" style="color: var(--accent); border-color: var(--accent);"></div>
+
+      <!-- Summary Counters -->
+      <div id="qaSummaryCards" class="grid grid-cols-2 sm:grid-cols-5 gap-3"></div>
+
+      <!-- Issue Sections -->
+      <div id="qaReportContainer" class="space-y-4"></div>
+    </section>
+
+    <!-- TAB 6: SETUP -->
     <section id="view-settings" class="hidden max-w-2xl mx-auto space-y-5">
       <div class="vault-card p-6 space-y-4">
         <h2 class="text-sm font-bold">1-Click Browser Bookmarklet</h2>
@@ -448,10 +501,34 @@
     const STORAGE_KEY = '3d_model_vault_v2';
     const THEME_KEY = '3d_model_vault_theme';
 
+    const VAULT_CATEGORIES = [
+      'Organizers & Gridfinity',
+      'Workshop & Tools',
+      'Printer Mods & Enclosures',
+      'Household & Desk',
+      'Electronics & Mounts',
+      'Mechanical & Replacement Parts',
+      'Miniatures & Decor',
+      'Uncategorized'
+    ];
+
+    function inferCategoryFromText(text) {
+      const t = (text || '').toLowerCase();
+      if (/gridfinity|bin|organizer|tray|drawer|holder|rack|storage|box/.test(t)) return 'Organizers & Gridfinity';
+      if (/enclosure|ptfe|extruder|nozzle|bambu|prusa|voron|spool|filament|fan duct|bed/.test(t)) return 'Printer Mods & Enclosures';
+      if (/pliers|cutter|wrench|clamp|jig|caliper|screwdriver|vise|tool|drill/.test(t)) return 'Workshop & Tools';
+      if (/cable|desk|hook|clip|mount|stand|shelf|coaster|kitchen|bath/.test(t)) return 'Household & Desk';
+      if (/esp32|arduino|pi|raspberry|sensor|case|led|usb|battery|switch/.test(t)) return 'Electronics & Mounts';
+      if (/gear|flange|bushing|bearing|bracket|adapter|hinge|knob|bolt|nut|gland/.test(t)) return 'Mechanical & Replacement Parts';
+      if (/mini|figurine|statue|art|toy|vase|planter|ornament|sculpt/.test(t)) return 'Miniatures & Decor';
+      return 'Uncategorized';
+    }
+
     const DEFAULT_MODELS = [
       {
         id: 'm_8f92a1',
         title: 'Gridfinity 2x3 Pliers & Flush Cutter Holder',
+        category: 'Organizers & Gridfinity',
         sourceType: 'makerworld',
         shapePreset: 'gridfinity',
         source: {
@@ -491,11 +568,13 @@
       {
         id: 'm_3c41b9',
         title: 'Custom Enclosure Filament Pass-Through Gland',
+        category: 'Printer Mods & Enclosures',
         sourceType: 'personal',
         shapePreset: 'flange',
         source: {
           isPersonalDesign: true,
           siteName: 'Personal CAD',
+          url: 'local://fusion360/enclosure_ptfe_gland_v1.3',
           cadTool: 'Fusion 360',
           designVersion: 'v1.3'
         },
@@ -529,6 +608,7 @@
       {
         id: 'm_7a19e4',
         title: 'Articulated Desk Cable Management Spine',
+        category: 'Household & Desk',
         sourceType: 'printables',
         shapePreset: 'gear',
         source: {
@@ -578,6 +658,11 @@
     const CONFIG_KEY = '3d_model_vault_cloud_config';
     let cloudConfig = { firebaseUrl: '', gasUrl: '', apiSecret: '' };
     let models = [];
+    let discoveredLocalOrphans = [];
+    let discoveredDriveOrphans = [];
+    let driveAuditFoldersById = {};
+    let driveAuditRan = false;
+    let qaAttachTargetModelId = null;
     let activeDrawerModelId = null;
     let currentTab = 'library';
     let pendingParsedFile = null;
@@ -1034,18 +1119,91 @@
     // =========================================================================
     // NAVIGATION & CLEAN RENDERING
     // =========================================================================
+    function populateCategoryDropdowns() {
+      const filterEl = document.getElementById('filterCategory');
+      if (filterEl) {
+        const currentVal = filterEl.value || 'all';
+        filterEl.innerHTML = `<option value="all">All Categories</option>` +
+          VAULT_CATEGORIES.map((c) => `<option value="${c}">${c}</option>`).join('');
+        filterEl.value = currentVal;
+      }
+      const formEl = document.getElementById('formCategory');
+      if (formEl && !formEl.options.length) {
+        formEl.innerHTML = VAULT_CATEGORIES.map((c) => `<option value="${c}">${c}</option>`).join('');
+      }
+    }
+
+    function autoSuggestCategoryFromTitle() {
+      const title = document.getElementById('formTitle')?.value || '';
+      const formEl = document.getElementById('formCategory');
+      if (!formEl || !title.trim()) return;
+      const suggested = inferCategoryFromText(title);
+      if (suggested !== 'Uncategorized') {
+        formEl.value = suggested;
+      }
+    }
+
+    function getModelPictureUrl(m) {
+      return m.thumbnailDataUrl || m.storage?.thumbnailFallbackUrl || '';
+    }
+
+    function hasValidSourceReference(m) {
+      if (m.source?.url && m.source.url.trim().length > 3) return true;
+      if (m.source?.isPersonalDesign && (m.source?.cadTool || m.source?.designVersion)) return true;
+      return false;
+    }
+
+    function hasValidAssociatedFiles(m) {
+      if (m.ingestionState === 'needs_files') return false;
+      const files = m.files || [];
+      if (files.length === 0) return false;
+      if (files.length === 1 && files[0].fileName === 'model.stl' && !files[0].sizeBytes && !files[0].driveFileId) {
+        return false;
+      }
+      if (driveAuditRan && m.storage?.driveFolderId) {
+        const df = driveAuditFoldersById[m.storage.driveFolderId];
+        if (!df) return false;
+        const modelFiles = (df.files || []).filter((f) => !['html', 'png', 'jpg', 'jpeg'].includes(f.extension));
+        if (modelFiles.length === 0) return false;
+      }
+      return true;
+    }
+
+    function getModelQaIssues(m) {
+      const issues = [];
+      if (!getModelPictureUrl(m)) issues.push('no_picture');
+      if (!hasValidSourceReference(m)) issues.push('no_source');
+      if (!m.category || m.category === 'Uncategorized' || m.category === 'Inbox') issues.push('uncategorized');
+      if (!hasValidAssociatedFiles(m)) issues.push('no_files');
+      return issues;
+    }
+
+    function formatFilamentSummary(m) {
+      const mat = (m.specs?.recommendedMaterial || '').trim();
+      const target = (m.workflow?.targetFilament || '').trim();
+      if (mat && target) {
+        if (target.toLowerCase() === mat.toLowerCase()) return target;
+        if (target.toLowerCase().includes(mat.toLowerCase())) return target;
+        return `${mat} · ${target}`;
+      }
+      return target || mat || 'PLA';
+    }
+
     function switchTab(tab) {
       closeDrawer();
       currentTab = tab;
-      ['library', 'queue', 'sources', 'ingest', 'settings'].forEach((t) => {
-        document.getElementById(`view-${t}`).classList.toggle('hidden', t !== tab);
+      ['library', 'queue', 'sources', 'ingest', 'qa', 'settings'].forEach((t) => {
+        const view = document.getElementById(`view-${t}`);
+        if (view) view.classList.toggle('hidden', t !== tab);
         const btn = document.getElementById(`tab-${t}`);
-        if (t === tab) {
-          btn.style.backgroundColor = 'var(--accent)';
-          btn.style.color = 'var(--accent-fg)';
-        } else {
-          btn.style.backgroundColor = 'transparent';
-          btn.style.color = 'var(--muted)';
+        if (btn) {
+          if (t === tab) {
+            btn.style.backgroundColor = 'var(--accent)';
+            btn.style.color = 'var(--accent-fg)';
+          } else {
+            btn.style.backgroundColor = 'transparent';
+            btn.style.color = 'var(--muted)';
+          }
         }
       });
       renderAll();
@@ -1056,29 +1214,49 @@
     }
 
     function renderAll() {
+      populateCategoryDropdowns();
       const queuedModels = models
         .filter((m) => m.workflow.status === 'queued' || m.workflow.status === 'printing')
         .sort((a, b) => (a.workflow.queueOrder || 99) - (b.workflow.queueOrder || 99));
 
+      const modelsWithIssues = models.filter((m) => getModelQaIssues(m).length > 0);
+      const totalQaCount = modelsWithIssues.length + discoveredLocalOrphans.length + discoveredDriveOrphans.length;
+
       document.getElementById('count-library').textContent = models.length;
       document.getElementById('count-queue').textContent = queuedModels.length;
+      const qaBadge = document.getElementById('count-qa');
+      if (qaBadge) qaBadge.textContent = totalQaCount;
 
       renderLibraryGrid();
       renderQueueList(queuedModels);
       renderSourcesDirectory();
+      renderQaView();
     }
 
     function renderLibraryGrid() {
       const q = (document.getElementById('searchInput')?.value || '').toLowerCase().trim();
+      const catFilter = document.getElementById('filterCategory')?.value || 'all';
       const srcFilter = document.getElementById('filterSource')?.value || 'all';
       const stFilter = document.getElementById('filterStatus')?.value || 'all';
 
       const filtered = models.filter((m) => {
+        const mCat = m.category || 'Uncategorized';
+        if (catFilter !== 'all' && mCat !== catFilter) return false;
         if (srcFilter !== 'all' && m.sourceType !== srcFilter) return false;
         if (stFilter === 'favorites' && !m.workflow?.favorite) return false;
-        if (stFilter !== 'all' && stFilter !== 'favorites' && m.workflow.status !== stFilter) return false;
+        if (stFilter === 'needs_attention' && getModelQaIssues(m).length === 0) return false;
+        if (stFilter !== 'all' && stFilter !== 'favorites' && stFilter !== 'needs_attention' && m.workflow.status !== stFilter) return false;
         if (!q) return true;
-        return [m.title, m.source?.author, m.source?.cadTool, m.nextTimeSummary, m.workflow?.targetFilament].join(' ').toLowerCase().includes(q);
+        return [
+          m.title,
+          m.category,
+          m.source?.author,
+          m.source?.cadTool,
+          m.source?.url,
+          m.nextTimeSummary,
+          m.specs?.recommendedMaterial,
+          m.workflow?.targetFilament
+        ].join(' ').toLowerCase().includes(q);
       });
 
       const grid = document.getElementById('libraryGrid');
@@ -1090,12 +1268,30 @@
       grid.innerHTML = filtered.map((m) => {
         const isQueued = m.workflow.status === 'queued';
         const isFav = Boolean(m.workflow?.favorite);
+        const picUrl = getModelPictureUrl(m);
+        const category = m.category || 'Uncategorized';
+        const issues = getModelQaIssues(m);
+        const srcUrl = (m.source?.url || '').trim();
+        const isHttpUrl = /^https?:\/\//i.test(srcUrl);
+
         return `
           <div onclick="openModelDrawer('${m.id}')" class="vault-card p-5 cursor-pointer flex flex-col justify-between gap-4">
             <div class="space-y-2">
               <div class="flex items-center justify-between text-[11px] font-medium" style="color: var(--muted);">
-                <span>${originText(m)}</span>
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <span class="truncate">${originText(m)}</span>
+                  ${
+                    isHttpUrl
+                      ? `<a href="${srcUrl}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" title="Open source URL" style="color: var(--accent);" class="shrink-0 hover:underline">↗</a>`
+                      : ''
+                  }
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                  ${
+                    issues.length > 0
+                      ? `<span title="QA issues: ${issues.join(', ')}" class="text-[10px] px-1.5 py-0.5 rounded font-mono" style="background-color: var(--brass-soft); color: var(--brass);">⚠ ${issues.length}</span>`
+                      : ''
+                  }
                   <button
                     onclick="toggleFavorite('${m.id}', event)"
                     title="${isFav ? 'Remove from Favorites' : 'Add to Favorites'}"
@@ -1107,15 +1303,29 @@
               </div>
 
               ${
-                (m.thumbnailDataUrl || m.storage?.thumbnailFallbackUrl)
-                  ? `<img src="${m.thumbnailDataUrl || m.storage?.thumbnailFallbackUrl}" alt="${m.title}" class="w-full h-32 object-contain rounded-md mb-1" style="background: var(--bg); border: 1px solid var(--border);" />`
-                  : ''
+                picUrl
+                  ? `<img src="${picUrl}" alt="${m.title}" class="w-full h-32 object-contain rounded-md mb-1" style="background: var(--bg); border: 1px solid var(--border);" />`
+                  : `<div class="w-full h-24 rounded-md mb-1 flex items-center justify-between px-3 text-[11px]" style="background: var(--bg); border: 1px dashed var(--border);">
+                       <span style="color: var(--muted);">No preview picture</span>
+                       <button onclick="event.stopPropagation(); generateSnapshotForModel('${m.id}')" class="vault-btn-ghost px-2 py-1 text-[10px]">Generate 3D Snapshot</button>
+                     </div>`
               }
+
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-[10px] px-2 py-0.5 rounded font-medium truncate" style="background-color: var(--surface-2); color: var(--muted);">
+                  ${category}
+                </span>
+                ${
+                  !hasValidSourceReference(m)
+                    ? `<span class="text-[10px] font-mono" style="color: var(--brass);">Missing Source URL</span>`
+                    : ''
+                }
+              </div>
 
               <h3 class="text-sm font-semibold leading-snug">${m.title}</h3>
 
               <div class="text-xs font-mono" style="color: var(--muted);">
-                ${m.specs?.estimatedPrintTimeDisplay || '—'} · ${m.specs?.filamentWeightGrams || '—'}g · ${m.specs?.recommendedMaterial || 'PLA'}
+                ${m.specs?.estimatedPrintTimeDisplay || '—'} · ${m.specs?.filamentWeightGrams || '—'}g · ${formatFilamentSummary(m)}
               </div>
 
               ${
@@ -1126,7 +1336,9 @@
             </div>
 
             <div class="flex items-center justify-between pt-3" style="border-top: 1px solid var(--border);">
-              <span class="text-[11px] font-mono uppercase" style="color: var(--muted);">${(m.files || []).map((f) => f.extension).join(' · ')}</span>
+              <span class="text-[11px] font-mono uppercase" style="color: ${hasValidAssociatedFiles(m) ? 'var(--muted)' : 'var(--brass)'};">
+                ${hasValidAssociatedFiles(m) ? (m.files || []).map((f) => f.extension).join(' · ') : '⚠ No file attached'}
+              </span>
               <button
                 onclick="toggleQueueStatus('${m.id}', event)"
                 class="${isQueued ? 'vault-btn-primary' : 'vault-btn-ghost'} px-2.5 py-1 text-[11px]"
@@ -1171,9 +1383,12 @@
             </div>
 
             <div class="min-w-0 space-y-1">
-              <h3 class="text-sm font-semibold truncate">${m.title}</h3>
+              <div class="flex items-center gap-2">
+                <h3 class="text-sm font-semibold truncate">${m.title}</h3>
+                <span class="text-[10px] px-1.5 py-0.5 rounded shrink-0" style="background-color: var(--surface-2); color: var(--muted);">${m.category || 'Uncategorized'}</span>
+              </div>
               <div class="text-xs font-mono" style="color: var(--muted);">
-                ${m.specs?.estimatedPrintTimeDisplay || '—'} · ${m.specs?.filamentWeightGrams || '—'}g · ${m.workflow?.targetFilament || m.specs?.recommendedMaterial || 'PLA'}
+                ${m.specs?.estimatedPrintTimeDisplay || '—'} · ${m.specs?.filamentWeightGrams || '—'}g · ${formatFilamentSummary(m)}
               </div>
               ${
                 m.nextTimeSummary
@@ -1241,13 +1456,19 @@
       if (!m) return;
       document.getElementById('drawerTitle').textContent = m.title;
       const isQueued = m.workflow.status === 'queued';
+      const picUrl = getModelPictureUrl(m);
+      const srcUrl = (m.source?.url || '').trim();
+      const isHttpUrl = /^https?:\/\//i.test(srcUrl);
 
       document.getElementById('drawerBody').innerHTML = `
-        <div class="flex items-center justify-between text-xs gap-2">
+        <div class="flex items-center justify-between text-xs gap-2 flex-wrap">
           <div class="font-mono" style="color: var(--muted);">
-            ${originText(m)} · ${m.specs?.estimatedPrintTimeDisplay || '—'} · ${m.specs?.filamentWeightGrams || '—'}g
+            ${originText(m)} · ${m.category || 'Uncategorized'} · ${m.specs?.estimatedPrintTimeDisplay || '—'} · ${m.specs?.filamentWeightGrams || '—'}g
           </div>
           <div class="flex items-center gap-1.5">
+            <button onclick="captureCurrentViewerAsThumbnail('${m.id}')" title="Save current 3D view as model thumbnail" class="vault-btn-ghost px-2.5 py-1 text-xs">
+              📸 Snapshot
+            </button>
             <button onclick="document.getElementById('editMetaBox').classList.toggle('hidden')" class="vault-btn-ghost px-2.5 py-1 text-xs">
               Edit
             </button>
@@ -1259,13 +1480,29 @@
 
         <!-- Collapsible Quick Edit & Delete Box -->
         <div id="editMetaBox" class="hidden p-3.5 rounded-lg space-y-2.5" style="background-color: var(--bg); border: 1px solid var(--border);">
-          <div>
-            <label class="block text-[11px] mb-1" style="color: var(--muted);">Title</label>
-            <input id="editTitleInput" type="text" value="${m.title.replace(/"/g, '&quot;')}" class="vault-input w-full px-2.5 py-1.5 text-xs" />
-          </div>
-          <div>
-            <label class="block text-[11px] mb-1" style="color: var(--muted);">Target Filament / Printer</label>
-            <input id="editFilamentInput" type="text" value="${(m.workflow?.targetFilament || '').replace(/"/g, '&quot;')}" class="vault-input w-full px-2.5 py-1.5 text-xs" />
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div>
+              <label class="block text-[11px] mb-1" style="color: var(--muted);">Title</label>
+              <input id="editTitleInput" type="text" value="${m.title.replace(/"/g, '&quot;')}" class="vault-input w-full px-2.5 py-1.5 text-xs" />
+            </div>
+            <div>
+              <label class="block text-[11px] mb-1" style="color: var(--muted);">Category</label>
+              <select id="editCategoryInput" class="vault-input w-full px-2.5 py-1.5 text-xs">
+                ${VAULT_CATEGORIES.map((c) => `<option value="${c}" ${(m.category || 'Uncategorized') === c ? 'selected' : ''}>${c}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] mb-1" style="color: var(--muted);">Material Type</label>
+              <input id="editMaterialInput" type="text" value="${(m.specs?.recommendedMaterial || '').replace(/"/g, '&quot;')}" placeholder="PETG / PLA / ASA" class="vault-input w-full px-2.5 py-1.5 text-xs" />
+            </div>
+            <div>
+              <label class="block text-[11px] mb-1" style="color: var(--muted);">Target Filament Spool</label>
+              <input id="editFilamentInput" type="text" value="${(m.workflow?.targetFilament || '').replace(/"/g, '&quot;')}" placeholder="Polymaker PETG Dark Grey" class="vault-input w-full px-2.5 py-1.5 text-xs" />
+            </div>
+            <div class="sm:col-span-2">
+              <label class="block text-[11px] mb-1" style="color: var(--muted);">Source URL / Origin Reference</label>
+              <input id="editSourceUrlInput" type="text" value="${(m.source?.url || '').replace(/"/g, '&quot;')}" placeholder="https://... or local://..." class="vault-input w-full px-2.5 py-1.5 text-xs" />
+            </div>
           </div>
           <div class="flex items-center justify-between pt-1">
             <button id="deleteModelBtn" onclick="requestDeleteModel('${m.id}')" class="text-xs font-medium text-rose-400 hover:underline">
@@ -1277,13 +1514,30 @@
           </div>
         </div>
 
-        <!-- Provenance -->
+        <!-- Provenance & Filament Summary -->
         <div class="text-xs space-y-1" style="color: var(--muted);">
+          <div>
+            Filament: <strong style="color: var(--text);">${formatFilamentSummary(m)}</strong>
+          </div>
           ${
             m.source?.isPersonalDesign
-              ? `<div>CAD: <strong style="color: var(--text);">${m.source.cadTool || 'Custom'}</strong> (${m.source.designVersion || 'v1.0'})</div>`
-              : `<div>By <strong style="color: var(--text);">${m.source?.author || '—'}</strong> · ${m.source?.license || '—'} ${m.source?.url ? `· <a href="${m.source.url}" target="_blank" style="color: var(--accent);" class="underline">Source ↗</a>` : ''}</div>`
+              ? `<div>CAD: <strong style="color: var(--text);">${m.source.cadTool || 'Custom'}</strong> (${m.source.designVersion || 'v1.0'}) ${srcUrl ? `· <span class="font-mono">${srcUrl}</span>` : ''}</div>`
+              : `<div>By <strong style="color: var(--text);">${m.source?.author || '—'}</strong> · ${m.source?.license || '—'} ${
+                  isHttpUrl
+                    ? `· <a href="${srcUrl}" target="_blank" rel="noopener noreferrer" style="color: var(--accent);" class="underline">Source ↗</a>`
+                    : srcUrl
+                      ? `· <span class="font-mono">${srcUrl}</span>`
+                      : `· <span style="color: var(--brass);">⚠ Missing Source URL</span>`
+                }</div>`
           }
+          <div class="flex items-center gap-2 pt-1 flex-wrap">
+            <span>Files: <strong style="color: var(--text);">${(m.files || []).map((f) => f.fileName).join(', ') || 'None'}</strong></span>
+            ${
+              !picUrl
+                ? `<span style="color: var(--brass);">· ⚠ No preview image</span>`
+                : ''
+            }
+          </div>
         </div>
 
         <!-- Large Pinned "For Next Time" Editor -->
@@ -1384,7 +1638,7 @@
       const m = models.find((x) => x.id === id);
       if (!m) return;
       const outcome = document.getElementById('logOutcome').value;
-      const filamentUsed = document.getElementById('logFilament').value.trim() || 'PETG';
+      const filamentUsed = document.getElementById('logFilament').value.trim() || m.workflow?.targetFilament || m.specs?.recommendedMaterial || 'PETG';
       const notes = document.getElementById('logNotes').value.trim();
       const forNextTime = document.getElementById('logNextTime').value.trim();
       if (!notes && !forNextTime) return;
@@ -1424,12 +1678,88 @@
       });
     }
 
+    /**
+     * Renders an offscreen 3D preview snapshot PNG dataURL from either a Three.js BufferGeometry
+     * or a shapePreset ('gridfinity', 'flange', 'gear').
+     */
+    function renderGeometrySnapshotDataUrl(geometry, shapePreset = 'gridfinity') {
+      const width = 360;
+      const height = 220;
+      const offCanvas = document.createElement('canvas');
+      offCanvas.width = width;
+      offCanvas.height = height;
+      const offRenderer = new THREE.WebGLRenderer({ canvas: offCanvas, antialias: true, preserveDrawingBuffer: true });
+      offRenderer.setSize(width, height, false);
+
+      const offScene = new THREE.Scene();
+      offScene.background = new THREE.Color(getThemeHex('--canvas-bg', 0x101012));
+      offScene.add(new THREE.HemisphereLight(0xffffff, 0x222222, 0.95));
+      const dLight = new THREE.DirectionalLight(0xffffff, 0.9);
+      dLight.position.set(120, 180, 130);
+      offScene.add(dLight);
+
+      const grid = new THREE.GridHelper(200, 20, getThemeHex('--grid-main', 0xff5a1f), getThemeHex('--grid-sub', 0x27272d));
+      grid.position.y = -25;
+      offScene.add(grid);
+
+      const mat = new THREE.MeshStandardMaterial({ color: getThemeHex('--accent', 0xff5a1f), roughness: 0.35, metalness: 0.18 });
+      if (geometry) {
+        const cloned = geometry.clone();
+        cloned.computeBoundingBox();
+        const size = new THREE.Vector3();
+        cloned.boundingBox.getSize(size);
+        cloned.center();
+        const scale = 75 / (Math.max(size.x, size.y, size.z) || 1);
+        const mesh = new THREE.Mesh(cloned, mat);
+        mesh.scale.set(scale, scale, scale);
+        mesh.rotation.x = -Math.PI / 2;
+        mesh.rotation.z = 0.45;
+        offScene.add(mesh);
+      } else {
+        const group = new THREE.Group();
+        if (shapePreset === 'flange') {
+          const base = new THREE.Mesh(new THREE.CylinderGeometry(32, 32, 8, 32), mat); base.position.y = -15;
+          const shaft = new THREE.Mesh(new THREE.CylinderGeometry(16, 16, 36, 32), mat); shaft.position.y = 4;
+          const hex = new THREE.Mesh(new THREE.CylinderGeometry(24, 24, 10, 6), mat);
+          group.add(base, shaft, hex);
+        } else if (shapePreset === 'gear') {
+          group.add(new THREE.Mesh(new THREE.TorusKnotGeometry(24, 7.5, 100, 16), mat));
+        } else {
+          const body = new THREE.Mesh(new THREE.BoxGeometry(64, 36, 92), mat); body.position.y = -4;
+          group.add(body);
+        }
+        group.rotation.y = 0.55;
+        offScene.add(group);
+      }
+
+      const offCam = new THREE.PerspectiveCamera(40, width / height, 1, 2000);
+      offCam.position.set(110, 95, 135);
+      offCam.lookAt(0, 0, 0);
+      offRenderer.render(offScene, offCam);
+      const dataUrl = offCanvas.toDataURL('image/png');
+      offRenderer.dispose();
+      return dataUrl;
+    }
+
+    function captureCurrentViewerAsThumbnail(id) {
+      const m = models.find((x) => x.id === id);
+      if (!m || !renderer || !scene || !camera) return;
+      renderer.render(scene, camera);
+      const canvas = document.getElementById('threeCanvas');
+      if (!canvas) return;
+      m.thumbnailDataUrl = canvas.toDataURL('image/png');
+      saveModels();
+      syncModelToFirebase(m);
+    }
+
     async function processIngestedFile(file) {
       const ext = file.name.split('.').pop().toLowerCase();
       const titleEl = document.getElementById('formTitle');
       if (titleEl && !titleEl.value.trim()) {
         titleEl.value = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ');
       }
+      autoSuggestCategoryFromTitle();
+
       pendingFileRef = file;
       pendingParsedFile = { fileName: file.name, extension: ext, sizeBytes: file.size };
       pendingThumbnailDataUrl = '';
@@ -1460,16 +1790,29 @@
           }
         }
         document.getElementById('formDims').value = dims;
+        // Automatically render a 3D preview thumbnail for the STL
+        const snapUrl = renderGeometrySnapshotDataUrl(geom);
+        pendingThumbnailDataUrl = snapUrl;
+        pendingThumbnailBase64 = snapUrl.split(',')[1] || '';
+        if (thumbImg && thumbWrap) {
+          thumbImg.src = snapUrl;
+          thumbWrap.classList.remove('hidden');
+        }
         autoFilledAnySpec = true;
-        statusEl.textContent = `Loaded STL: ${file.name} (${dims} mm)`;
+        statusEl.textContent = `Loaded STL & generated 3D preview: ${file.name} (${dims} mm)`;
       } else if (ext === 'gcode' || ext === 'gco') {
         const text = await file.text();
         const tMatch = text.match(/estimated printing time.*=\s*(.+)/i);
         const wMatch = text.match(/filament used \[g\]\s*=\s*([\d.]+)/i);
         const mMatch = text.match(/filament_type\s*=\s*([A-Za-z0-9+\-_]+)/i);
+        const sMatch = text.match(/filament_settings_id\s*=\s*"?([^"\r\n;]+)"?/i);
         if (tMatch) { document.getElementById('formPrintTime').value = tMatch[1].trim(); autoFilledAnySpec = true; }
         if (wMatch) { document.getElementById('formWeight').value = parseFloat(wMatch[1]); autoFilledAnySpec = true; }
         if (mMatch) { document.getElementById('formMaterial').value = mMatch[1]; autoFilledAnySpec = true; }
+        if (sMatch && !document.getElementById('formTargetFilament').value) {
+          document.getElementById('formTargetFilament').value = sMatch[1].trim();
+          autoFilledAnySpec = true;
+        }
         statusEl.textContent = `Parsed G-code headers: ${file.name}`;
       } else if ((ext === '3mf' || ext === 'zip') && window.JSZip) {
         try {
@@ -1527,6 +1870,7 @@
             const predMatch = xml.match(/key=["']prediction["']\s+value=["'](\d+)["']/i);
             const weightMatch = xml.match(/key=["']weight["']\s+value=["']([\d.]+)["']/i);
             const filMatch = xml.match(/<filament[^>]+type=["']([^"']+)["']/i);
+            const filColorMatch = xml.match(/<filament[^>]+color=["']([^"']+)["']/i);
             if (predMatch) {
               const mins = Math.round(parseInt(predMatch[1], 10) / 60);
               document.getElementById('formPrintTime').value = `${Math.floor(mins / 60)}h ${mins % 60}m`;
@@ -1540,6 +1884,9 @@
             }
             if (filMatch) {
               document.getElementById('formMaterial').value = filMatch[1];
+              if (filColorMatch && !document.getElementById('formTargetFilament').value) {
+                document.getElementById('formTargetFilament').value = `${filMatch[1]} (${filColorMatch[1]})`;
+              }
               autoFilledAnySpec = true;
               extracted.push(filMatch[1]);
             }
@@ -1550,10 +1897,15 @@
           if (cfgPath) {
             const cfgText = await zip.files[cfgPath].async('string');
             const filType = cfgText.match(/"filament_type"\s*:\s*\[\s*"([^"]+)"/i) || cfgText.match(/filament_type\s*=\s*([A-Za-z0-9+\-_]+)/i);
+            const filProfile = cfgText.match(/"filament_settings_id"\s*:\s*\[\s*"([^"]+)"/i) || cfgText.match(/filament_settings_id\s*=\s*"?([^"\r\n;]+)"?/i);
             if (filType && !document.getElementById('formMaterial').value) {
               document.getElementById('formMaterial').value = filType[1];
               autoFilledAnySpec = true;
               extracted.push(filType[1]);
+            }
+            if (filProfile && !document.getElementById('formTargetFilament').value) {
+              document.getElementById('formTargetFilament').value = filProfile[1].trim();
+              autoFilledAnySpec = true;
             }
           }
 
@@ -1581,6 +1933,16 @@
                 }
               }
               document.getElementById('formDims').value = dims;
+              if (!pendingThumbnailDataUrl) {
+                const snapUrl = renderGeometrySnapshotDataUrl(geom);
+                pendingThumbnailDataUrl = snapUrl;
+                pendingThumbnailBase64 = snapUrl.split(',')[1] || '';
+                if (thumbImg && thumbWrap) {
+                  thumbImg.src = snapUrl;
+                  thumbWrap.classList.remove('hidden');
+                }
+                extracted.push('3D preview');
+              }
               autoFilledAnySpec = true;
               extracted.push(dims + ' mm');
             }
@@ -1606,6 +1968,8 @@
       const isP = document.getElementById('formSourceType').value === 'personal';
       document.getElementById('personalSourceGroup').classList.toggle('hidden', !isP);
       document.getElementById('externalSourceGroup').classList.toggle('hidden', isP);
+      const alertEl = document.getElementById('ingestFormAlert');
+      if (alertEl) alertEl.classList.add('hidden');
     }
 
     function applyDetectedSource(sourceType, detectedUrl = '') {
@@ -1855,39 +2219,74 @@
     async function saveNewModel() {
       const btn = document.getElementById('saveNewModelBtn');
       const statusEl = document.getElementById('droppedFileStatus');
+      const alertEl = document.getElementById('ingestFormAlert');
+      if (alertEl) alertEl.classList.add('hidden');
+
       const title = document.getElementById('formTitle').value.trim() || 'Untitled Model';
       const st = document.getElementById('formSourceType').value;
       const isP = st === 'personal';
+      const extUrl = document.getElementById('formUrl').value.trim();
+      const personalRef = document.getElementById('formPersonalRef')?.value.trim() || '';
+      const cadTool = document.getElementById('formCadTool').value.trim() || 'Fusion 360';
+      const designVersion = document.getElementById('formVersion').value.trim() || 'v1.0';
+
+      // Enforce source URL / origin reference integrity for external models
+      if (!isP && !extUrl) {
+        if (alertEl) {
+          alertEl.textContent = 'Please provide a Source URL / Reference (e.g. MakerWorld, Printables, Thingiverse URL or origin note) so every model retains provenance.';
+          alertEl.classList.remove('hidden');
+        }
+        document.getElementById('formUrl').focus();
+        return;
+      }
+
+      const categorySel = document.getElementById('formCategory')?.value;
+      const category = (categorySel && categorySel !== 'Uncategorized')
+        ? categorySel
+        : inferCategoryFromText(title);
+
       const status = document.getElementById('formStatus').value;
       const modelId = 'm_' + Math.random().toString(36).slice(2, 8);
+      const shapePreset = isP ? 'flange' : 'gridfinity';
+
+      // Ensure a preview picture is generated if none was extracted
+      if (!pendingThumbnailDataUrl) {
+        pendingThumbnailDataUrl = renderGeometrySnapshotDataUrl(pendingCustomGeometry, shapePreset);
+        pendingThumbnailBase64 = pendingThumbnailDataUrl.split(',')[1] || '';
+      }
+
+      const recMaterial = document.getElementById('formMaterial').value.trim();
+      const targetFil = document.getElementById('formTargetFilament').value.trim();
 
       const newModel = {
         id: modelId,
         title,
+        category,
         sourceType: st,
-        shapePreset: isP ? 'flange' : 'gridfinity',
+        shapePreset,
+        ingestionState: pendingParsedFile ? 'complete' : 'needs_files',
         customGeometry: pendingCustomGeometry || null,
         thumbnailDataUrl: pendingThumbnailDataUrl || '',
         createdAt: new Date().toISOString(),
         source: {
           isPersonalDesign: isP,
           siteName: isP ? 'Personal CAD' : st,
-          url: document.getElementById('formUrl').value.trim(),
+          url: isP ? (personalRef || `local://${cadTool.toLowerCase().replace(/\s+/g, '-')}/${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${designVersion}`) : extUrl,
           author: isP ? 'Keith' : (document.getElementById('formAuthor').value.trim() || 'Designer'),
-          cadTool: isP ? (document.getElementById('formCadTool').value.trim() || 'Fusion 360') : null,
-          designVersion: isP ? (document.getElementById('formVersion').value.trim() || 'v1.0') : null
+          cadTool: isP ? cadTool : null,
+          designVersion: isP ? designVersion : null
         },
-        files: pendingParsedFile ? [pendingParsedFile] : [{ fileName: 'model.stl', extension: 'stl' }],
+        files: pendingParsedFile ? [pendingParsedFile] : [],
         specs: {
           dimensionsDisplay: (document.getElementById('formDims').value.trim() || '100 × 100 × 50') + ' mm',
           estimatedPrintTimeDisplay: document.getElementById('formPrintTime').value.trim() || '1h 30m',
           filamentWeightGrams: parseFloat(document.getElementById('formWeight').value) || 40.0,
-          recommendedMaterial: document.getElementById('formMaterial').value.trim() || 'PETG'
+          recommendedMaterial: recMaterial || (targetFil ? targetFil.split(/\s+/)[0] : 'PETG')
         },
         workflow: {
           status,
           queueOrder: models.filter((x) => x.workflow.status === 'queued').length + 1,
-          targetFilament: document.getElementById('formTargetFilament').value.trim() || 'PETG'
+          targetFilament: targetFil
         },
         nextTimeSummary: document.getElementById('formNextTime').value.trim(),
         printLogs: []
@@ -1983,9 +2382,19 @@
       const m = models.find((x) => x.id === id);
       if (!m) return;
       const newTitle = document.getElementById('editTitleInput').value.trim();
+      const newCat = document.getElementById('editCategoryInput')?.value;
+      const newMat = document.getElementById('editMaterialInput')?.value.trim();
       const newFilament = document.getElementById('editFilamentInput').value.trim();
+      const newSourceUrl = document.getElementById('editSourceUrlInput')?.value.trim();
+
       if (newTitle) m.title = newTitle;
+      if (newCat) m.category = newCat;
+      m.specs = m.specs || {};
+      if (newMat !== undefined) m.specs.recommendedMaterial = newMat || 'PETG';
       m.workflow.targetFilament = newFilament;
+      m.source = m.source || {};
+      if (newSourceUrl !== undefined) m.source.url = newSourceUrl;
+
       saveModels();
       syncModelToFirebase(m);
     }
@@ -2002,6 +2411,653 @@
       closeDrawer();
       saveModels();
       deleteModelFromFirebase(id);
+    }
+
+    // =========================================================================
+    // QA/QC AUDIT, PICTURE BACKFILL, SOURCE INTEGRITY & ORPHAN RECONCILIATION
+    // =========================================================================
+    function showQaStatus(msg) {
+      const el = document.getElementById('qaActionStatus');
+      if (!el) return;
+      el.textContent = msg;
+      el.classList.remove('hidden');
+    }
+
+    function generateSnapshotForModel(id) {
+      const m = models.find((x) => x.id === id);
+      if (!m) return;
+      m.thumbnailDataUrl = renderGeometrySnapshotDataUrl(m.customGeometry, m.shapePreset || 'gridfinity');
+      saveModels();
+      syncModelToFirebase(m);
+      showQaStatus(`Generated 3D preview snapshot for "${m.title}".`);
+    }
+
+    async function retrievePictureFromSourceUrl(id) {
+      const m = models.find((x) => x.id === id);
+      if (!m) return;
+      const url = (m.source?.url || '').trim();
+      if (!/^https?:\/\//i.test(url)) {
+        showQaStatus(`Model "${m.title}" does not have an HTTP/HTTPS source URL to scrape.`);
+        return;
+      }
+      if (!cloudConfig.gasUrl) {
+        showQaStatus('Configure your Google Apps Script URL in Setup to fetch OpenGraph images from external model pages, or use "Generate 3D Snapshot".');
+        return;
+      }
+      showQaStatus(`Retrieving preview image from ${url}...`);
+      try {
+        const res = await fetch(cloudConfig.gasUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'scrapeThumbnail',
+            secret: cloudConfig.apiSecret || '',
+            url
+          })
+        });
+        const data = await res.json();
+        if (data.ok && (data.base64 || data.imageUrl)) {
+          if (data.base64) {
+            const rawUrl = `data:${data.mimeType || 'image/png'};base64,${data.base64}`;
+            m.thumbnailDataUrl = await resizeDataUrl(rawUrl, 320);
+          } else {
+            m.storage = m.storage || {};
+            m.storage.thumbnailFallbackUrl = data.imageUrl;
+          }
+          saveModels();
+          syncModelToFirebase(m);
+          showQaStatus(`Retrieved preview picture for "${m.title}".`);
+        } else {
+          showQaStatus(`Could not scrape image (${data.error || 'none found'}). Falling back to 3D snapshot...`);
+          generateSnapshotForModel(id);
+        }
+      } catch (err) {
+        showQaStatus(`Source scrape failed (${err.message}).`);
+      }
+    }
+
+    async function extractPictureFromDriveArchive(id) {
+      const m = models.find((x) => x.id === id);
+      if (!m) return;
+      const driveArch = (m.files || []).find((f) => f.driveFileId && (f.extension === '3mf' || f.extension === 'zip' || f.extension === 'stl'));
+      if (!driveArch || !cloudConfig.gasUrl) {
+        promptAttachFileToModel(id);
+        return;
+      }
+      showQaStatus(`Downloading ${driveArch.fileName} from Google Drive to extract preview...`);
+      try {
+        const sep = cloudConfig.gasUrl.includes('?') ? '&' : '?';
+        const sec = cloudConfig.apiSecret ? `&secret=${encodeURIComponent(cloudConfig.apiSecret)}` : '';
+        const res = await fetch(`${cloudConfig.gasUrl}${sep}action=getFile&driveFileId=${encodeURIComponent(driveArch.driveFileId)}${sec}`);
+        const data = await res.json();
+        if (!data.ok || !data.base64) throw new Error(data.error || 'Empty file');
+        const bin = atob(data.base64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+
+        if (driveArch.extension === 'stl') {
+          const geom = parseStlBufferToGeometry(bytes.buffer);
+          m.customGeometry = geom;
+          m.thumbnailDataUrl = renderGeometrySnapshotDataUrl(geom, m.shapePreset);
+        } else if (window.JSZip) {
+          const zip = await JSZip.loadAsync(bytes.buffer);
+          const entries = Object.keys(zip.files);
+          const thumbPath =
+            entries.find((e) => /metadata\/plate_1\.png$/i.test(e)) ||
+            entries.find((e) => /thumbnails?\/.*\.png$/i.test(e)) ||
+            entries.find((e) => /\.(png|jpg|jpeg)$/i.test(e) && !e.startsWith('__MACOSX'));
+          if (thumbPath) {
+            const rawB64 = await zip.files[thumbPath].async('base64');
+            m.thumbnailDataUrl = await resizeDataUrl('data:image/png;base64,' + rawB64, 320);
+          } else {
+            const innerStl = entries.find((e) => /\.stl$/i.test(e));
+            if (innerStl) {
+              const geom = parseStlBufferToGeometry(await zip.files[innerStl].async('arraybuffer'));
+              m.customGeometry = geom;
+              m.thumbnailDataUrl = renderGeometrySnapshotDataUrl(geom, m.shapePreset);
+            }
+          }
+        }
+        saveModels();
+        syncModelToFirebase(m);
+        showQaStatus(`Extracted preview picture from ${driveArch.fileName} for "${m.title}".`);
+      } catch (err) {
+        showQaStatus(`Drive extraction failed: ${err.message}`);
+      }
+    }
+
+    function batchGenerateMissingPictures() {
+      let count = 0;
+      models.forEach((m) => {
+        if (!getModelPictureUrl(m)) {
+          m.thumbnailDataUrl = renderGeometrySnapshotDataUrl(m.customGeometry, m.shapePreset || 'gridfinity');
+          syncModelToFirebase(m);
+          count++;
+        }
+      });
+      saveModels();
+      showQaStatus(count ? `Generated 3D preview snapshots for ${count} model(s).` : 'All models already have preview pictures.');
+    }
+
+    function batchAutoCategorizeModels() {
+      let count = 0;
+      models.forEach((m) => {
+        if (!m.category || m.category === 'Uncategorized' || m.category === 'Inbox') {
+          const inferred = inferCategoryFromText([m.title, m.nextTimeSummary, m.source?.cadTool].join(' '));
+          m.category = inferred !== 'Uncategorized' ? inferred : 'Mechanical & Replacement Parts';
+          syncModelToFirebase(m);
+          count++;
+        }
+      });
+      saveModels();
+      showQaStatus(count ? `Auto-categorized ${count} model(s).` : 'All models already have assigned categories.');
+    }
+
+    function saveQaSourceReference(id) {
+      const m = models.find((x) => x.id === id);
+      const input = document.getElementById(`qaSourceInput_${id}`);
+      if (!m || !input) return;
+      const val = input.value.trim();
+      if (!val) return;
+      m.source = m.source || {};
+      m.source.url = val;
+      if (/makerworld\.com/i.test(val)) { m.sourceType = 'makerworld'; m.source.siteName = 'MakerWorld'; }
+      else if (/printables\.com/i.test(val)) { m.sourceType = 'printables'; m.source.siteName = 'Printables'; }
+      else if (/thingiverse\.com/i.test(val)) { m.sourceType = 'thingiverse'; m.source.siteName = 'Thingiverse'; }
+      saveModels();
+      syncModelToFirebase(m);
+      showQaStatus(`Updated source reference for "${m.title}".`);
+    }
+
+    function markQaModelAsPersonalOrigin(id) {
+      const m = models.find((x) => x.id === id);
+      if (!m) return;
+      m.sourceType = 'personal';
+      m.source = {
+        ...m.source,
+        isPersonalDesign: true,
+        siteName: 'Personal CAD',
+        cadTool: m.source?.cadTool || 'Fusion 360',
+        designVersion: m.source?.designVersion || 'v1.0',
+        url: `local://personal-cad/${m.id}`
+      };
+      saveModels();
+      syncModelToFirebase(m);
+      showQaStatus(`Marked "${m.title}" as Personal CAD origin.`);
+    }
+
+    function saveQaCategory(id, newCat) {
+      const m = models.find((x) => x.id === id);
+      if (!m || !newCat) return;
+      m.category = newCat;
+      saveModels();
+      syncModelToFirebase(m);
+      showQaStatus(`Assigned "${m.title}" to ${newCat}.`);
+    }
+
+    function promptAttachFileToModel(id) {
+      qaAttachTargetModelId = id;
+      let input = document.getElementById('qaSingleAttachInput');
+      if (!input) {
+        input = document.createElement('input');
+        input.type = 'file';
+        input.id = 'qaSingleAttachInput';
+        input.accept = '.stl,.gcode,.gco,.3mf,.zip,.step,.f3d';
+        input.className = 'hidden';
+        input.onchange = handleAttachFileToExistingModel;
+        document.body.appendChild(input);
+      }
+      input.click();
+    }
+
+    async function handleAttachFileToExistingModel(event) {
+      const file = event.target.files?.[0];
+      const id = qaAttachTargetModelId;
+      event.target.value = '';
+      if (!file || !id) return;
+      const m = models.find((x) => x.id === id);
+      if (!m) return;
+      const ext = file.name.split('.').pop().toLowerCase();
+      const fileEntry = { fileName: file.name, extension: ext, sizeBytes: file.size };
+
+      if (ext === 'stl') {
+        const geom = parseStlBufferToGeometry(await file.arrayBuffer());
+        geom.computeBoundingBox();
+        const size = new THREE.Vector3();
+        geom.boundingBox.getSize(size);
+        m.specs = m.specs || {};
+        m.specs.dimensionsDisplay = `${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ${size.z.toFixed(1)} mm`;
+        m.customGeometry = geom;
+        if (!getModelPictureUrl(m)) {
+          m.thumbnailDataUrl = renderGeometrySnapshotDataUrl(geom, m.shapePreset);
+        }
+      } else if ((ext === '3mf' || ext === 'zip') && window.JSZip) {
+        try {
+          const zip = await JSZip.loadAsync(file);
+          const entries = Object.keys(zip.files);
+          const thumbPath =
+            entries.find((e) => /metadata\/plate_1\.png$/i.test(e)) ||
+            entries.find((e) => /thumbnails?\/.*\.png$/i.test(e)) ||
+            entries.find((e) => /\.(png|jpg|jpeg)$/i.test(e) && !e.startsWith('__MACOSX'));
+          if (thumbPath) {
+            const rawB64 = await zip.files[thumbPath].async('base64');
+            m.thumbnailDataUrl = await resizeDataUrl('data:image/png;base64,' + rawB64, 320);
+          }
+        } catch (e) {}
+      }
+
+      m.files = (m.files || []).filter((f) => !(f.fileName === 'model.stl' && !f.sizeBytes && !f.driveFileId));
+      m.files.push(fileEntry);
+      m.ingestionState = 'complete';
+
+      if (cloudConfig.gasUrl) {
+        showQaStatus(`Uploading ${file.name} to Google Drive for "${m.title}"...`);
+        try {
+          const base64 = await fileToBase64(file);
+          const res = await fetch(cloudConfig.gasUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({
+              action: 'uploadFile',
+              secret: cloudConfig.apiSecret || '',
+              modelId: m.id,
+              title: m.title,
+              driveFolderId: m.storage?.driveFolderId || null,
+              fileName: file.name,
+              mimeType: file.type || 'application/octet-stream',
+              base64,
+              model: serializeModel(m)
+            })
+          });
+          const data = await res.json();
+          if (data.ok && data.driveFileId) {
+            fileEntry.driveFileId = data.driveFileId;
+            m.storage = {
+              ...(m.storage || {}),
+              driveFolderId: data.driveFolderId,
+              driveFolderUrl: data.driveFolderUrl
+            };
+          }
+        } catch (e) {}
+      }
+
+      saveModels();
+      syncModelToFirebase(m);
+      showQaStatus(`Attached ${file.name} to "${m.title}".`);
+    }
+
+    function handleLocalOrphanFileScan(event) {
+      const files = Array.from(event.target.files || []);
+      event.target.value = '';
+      if (!files.length) return;
+
+      const knownFileNames = new Set();
+      models.forEach((m) => (m.files || []).forEach((f) => knownFileNames.add((f.fileName || '').toLowerCase())));
+
+      let unmatchedCount = 0;
+      files.forEach((f) => {
+        if (!knownFileNames.has(f.name.toLowerCase())) {
+          if (!discoveredLocalOrphans.some((o) => o.file.name.toLowerCase() === f.name.toLowerCase())) {
+            discoveredLocalOrphans.push({
+              orphanId: 'local_' + Math.random().toString(36).slice(2, 8),
+              file: f,
+              fileName: f.name,
+              extension: f.name.split('.').pop().toLowerCase(),
+              sizeBytes: f.size
+            });
+            unmatchedCount++;
+          }
+        }
+      });
+
+      renderAll();
+      showQaStatus(
+        unmatchedCount > 0
+          ? `Found ${unmatchedCount} local file(s) with no matching metadata record in the vault.`
+          : `All ${files.length} scanned local file(s) match existing metadata records.`
+      );
+    }
+
+    async function ingestLocalOrphanAsModel(orphanId) {
+      const idx = discoveredLocalOrphans.findIndex((o) => o.orphanId === orphanId);
+      if (idx < 0) return;
+      const orphan = discoveredLocalOrphans[idx];
+      await processIngestedFile(orphan.file);
+      discoveredLocalOrphans.splice(idx, 1);
+      switchTab('ingest');
+    }
+
+    async function linkLocalOrphanToExistingModel(orphanId) {
+      const selectEl = document.getElementById(`linkTarget_${orphanId}`);
+      const targetModelId = selectEl?.value;
+      const idx = discoveredLocalOrphans.findIndex((o) => o.orphanId === orphanId);
+      if (idx < 0 || !targetModelId) return;
+      const orphan = discoveredLocalOrphans[idx];
+      qaAttachTargetModelId = targetModelId;
+      await handleAttachFileToExistingModel({ target: { files: [orphan.file], value: '' } });
+      discoveredLocalOrphans.splice(idx, 1);
+      renderAll();
+    }
+
+    function dismissLocalOrphan(orphanId) {
+      discoveredLocalOrphans = discoveredLocalOrphans.filter((o) => o.orphanId !== orphanId);
+      renderAll();
+    }
+
+    async function runDriveOrphanScan() {
+      if (!cloudConfig.gasUrl) {
+        showQaStatus('Configure your Google Apps Script Web App URL in Setup to scan Google Drive for orphaned folders/files and missing Drive binaries.');
+        return;
+      }
+      const btn = document.getElementById('qaDriveScanBtn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Scanning Drive...'; }
+      showQaStatus('Scanning /3D Model Vault/Models in Google Drive...');
+      try {
+        const sep = cloudConfig.gasUrl.includes('?') ? '&' : '?';
+        const sec = cloudConfig.apiSecret ? `&secret=${encodeURIComponent(cloudConfig.apiSecret)}` : '';
+        const res = await fetch(`${cloudConfig.gasUrl}${sep}action=auditDrive${sec}`);
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Audit failed');
+
+        const folders = data.folders || [];
+        driveAuditFoldersById = {};
+        folders.forEach((f) => { driveAuditFoldersById[f.driveFolderId] = f; });
+        driveAuditRan = true;
+
+        const knownModelIds = new Set(models.map((m) => m.id));
+        const knownFolderIds = new Set(models.map((m) => m.storage?.driveFolderId).filter(Boolean));
+
+        discoveredDriveOrphans = folders.filter((f) => {
+          if (knownFolderIds.has(f.driveFolderId)) return false;
+          if (f.inferredModelId && knownModelIds.has(f.inferredModelId)) return false;
+          return true;
+        });
+
+        renderAll();
+        showQaStatus(`Drive scan complete: ${folders.length} Drive folder(s) inspected, ${discoveredDriveOrphans.length} orphaned folder(s) without metadata.`);
+      } catch (err) {
+        showQaStatus(`Drive scan failed: ${err.message}`);
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Scan Google Drive'; }
+      }
+    }
+
+    function adoptDriveOrphanFolder(driveFolderId) {
+      const idx = discoveredDriveOrphans.findIndex((f) => f.driveFolderId === driveFolderId);
+      if (idx < 0) return;
+      const folder = discoveredDriveOrphans[idx];
+      const modelId = folder.inferredModelId || ('m_' + Math.random().toString(36).slice(2, 8));
+      const cleanTitle = folder.driveFolderName
+        .replace(/^\d{4}-\d{2}-\d{2}_/, '')
+        .replace(/_m_[a-z0-9]+$/i, '')
+        .replace(/[-_]+/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase()) || 'Recovered Drive Model';
+
+      const modelFiles = (folder.files || []).filter((f) => !['html', 'png', 'jpg', 'jpeg'].includes(f.extension));
+      const newModel = {
+        id: modelId,
+        title: cleanTitle,
+        category: inferCategoryFromText(cleanTitle),
+        sourceType: 'other',
+        shapePreset: 'gridfinity',
+        ingestionState: modelFiles.length ? 'complete' : 'needs_files',
+        thumbnailDataUrl: renderGeometrySnapshotDataUrl(null, 'gridfinity'),
+        createdAt: folder.createdAt || new Date().toISOString(),
+        source: {
+          isPersonalDesign: false,
+          siteName: 'Google Drive Recovery',
+          url: folder.driveFolderUrl,
+          author: 'Recovered'
+        },
+        storage: {
+          driveFolderId: folder.driveFolderId,
+          driveFolderUrl: folder.driveFolderUrl
+        },
+        files: modelFiles.map((f) => ({
+          fileName: f.fileName,
+          extension: f.extension,
+          sizeBytes: f.sizeBytes,
+          driveFileId: f.driveFileId
+        })),
+        specs: {
+          dimensionsDisplay: '—',
+          estimatedPrintTimeDisplay: '—',
+          filamentWeightGrams: 0,
+          recommendedMaterial: 'PETG'
+        },
+        workflow: {
+          status: 'archived',
+          queueOrder: 99,
+          targetFilament: ''
+        },
+        nextTimeSummary: 'Recovered from orphaned Google Drive folder via QA/QC scan.',
+        printLogs: []
+      };
+
+      models.unshift(newModel);
+      discoveredDriveOrphans.splice(idx, 1);
+      saveModels();
+      syncModelToFirebase(newModel);
+      showQaStatus(`Created metadata record for Drive folder "${folder.driveFolderName}".`);
+    }
+
+    function renderQaView() {
+      const summaryEl = document.getElementById('qaSummaryCards');
+      const reportEl = document.getElementById('qaReportContainer');
+      if (!summaryEl || !reportEl) return;
+
+      const missingPics = models.filter((m) => !getModelPictureUrl(m));
+      const missingSources = models.filter((m) => !hasValidSourceReference(m));
+      const uncategorized = models.filter((m) => !m.category || m.category === 'Uncategorized' || m.category === 'Inbox');
+      const missingFiles = models.filter((m) => !hasValidAssociatedFiles(m));
+      const totalOrphans = discoveredLocalOrphans.length + discoveredDriveOrphans.length;
+
+      const cards = [
+        { label: 'Missing Pictures', count: missingPics.length, desc: 'Generate, extract, or retrieve' },
+        { label: 'Missing Source URL', count: missingSources.length, desc: 'Provenance / origin link' },
+        { label: 'Uncategorized', count: uncategorized.length, desc: 'Needs archive category' },
+        { label: 'Metadata w/o Files', count: missingFiles.length, desc: 'Records missing 3D files' },
+        { label: 'Files w/o Metadata', count: totalOrphans, desc: 'Orphaned local/Drive files' }
+      ];
+
+      summaryEl.innerHTML = cards.map((c) => `
+        <div class="vault-card p-3.5 space-y-1">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-medium" style="color: var(--muted);">${c.label}</span>
+            <span class="text-sm font-bold font-mono" style="color: ${c.count > 0 ? 'var(--brass)' : 'var(--accent)'};">${c.count}</span>
+          </div>
+          <p class="text-[10px]" style="color: var(--muted);">${c.desc}</p>
+        </div>
+      `).join('');
+
+      const sections = [];
+
+      // 1. Metadata without Associated Files
+      sections.push(`
+        <div class="vault-card p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-xs font-bold uppercase tracking-wider">1. Metadata Without Associated Files (${missingFiles.length})</h3>
+              <p class="text-[11px]" style="color: var(--muted);">Models ingested via URL/bookmarklet or placeholders that have no real STL/3MF/G-code attached.</p>
+            </div>
+          </div>
+          ${
+            missingFiles.length === 0
+              ? `<div class="text-xs py-2" style="color: var(--muted);">✓ Every metadata record has associated model files.</div>`
+              : `<div class="space-y-2">` + missingFiles.map((m) => `
+                  <div class="p-3 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs" style="background-color: var(--bg); border: 1px solid var(--border);">
+                    <div>
+                      <div class="font-semibold">${m.title} <span class="font-mono text-[11px]" style="color: var(--muted);">(${m.id})</span></div>
+                      <div class="text-[11px]" style="color: var(--muted);">State: ${m.ingestionState || 'missing_binary'} · Source: ${originText(m)}</div>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                      <button onclick="promptAttachFileToModel('${m.id}')" class="vault-btn-primary px-2.5 py-1 text-[11px]">Attach File (.STL/.3MF/.GCODE)</button>
+                      <button onclick="models = models.filter(x => x.id !== '${m.id}'); saveModels(); deleteModelFromFirebase('${m.id}');" class="vault-btn-ghost px-2.5 py-1 text-[11px] text-rose-400">Delete Record</button>
+                    </div>
+                  </div>
+                `).join('') + `</div>`
+          }
+        </div>
+      `);
+
+      // 2. Files Without Metadata (Local + Google Drive Orphans)
+      sections.push(`
+        <div class="vault-card p-5 space-y-3">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h3 class="text-xs font-bold uppercase tracking-wider">2. Files Without Metadata (${totalOrphans})</h3>
+              <p class="text-[11px]" style="color: var(--muted);">Orphaned local files or Google Drive folders that aren't linked to any metadata record in the vault.</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="document.getElementById('qaLocalOrphanInput').click()" class="vault-btn-ghost px-2.5 py-1 text-[11px]">Select Local Files to Check</button>
+              <button onclick="runDriveOrphanScan()" class="vault-btn-ghost px-2.5 py-1 text-[11px]">Check Google Drive</button>
+            </div>
+          </div>
+          ${
+            totalOrphans === 0
+              ? `<div class="text-xs py-2" style="color: var(--muted);">✓ No orphaned files detected. Click "Select Local Files to Check" or "Check Google Drive" to audit storage.</div>`
+              : `<div class="space-y-2">` +
+                discoveredLocalOrphans.map((o) => `
+                  <div class="p-3 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs" style="background-color: var(--bg); border: 1px solid var(--border);">
+                    <div>
+                      <div class="font-semibold">${o.fileName} <span class="font-mono text-[11px]" style="color: var(--brass);">[Local Orphan · ${(o.sizeBytes / 1024).toFixed(1)} KB]</span></div>
+                      <div class="text-[11px]" style="color: var(--muted);">Not referenced by any model record in the vault.</div>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap shrink-0">
+                      <button onclick="ingestLocalOrphanAsModel('${o.orphanId}')" class="vault-btn-primary px-2.5 py-1 text-[11px]">+ Create Model Record</button>
+                      <select id="linkTarget_${o.orphanId}" class="vault-input px-2 py-1 text-[11px]">
+                        ${models.map((m) => `<option value="${m.id}">Link to: ${m.title.slice(0, 28)}</option>`).join('')}
+                      </select>
+                      <button onclick="linkLocalOrphanToExistingModel('${o.orphanId}')" class="vault-btn-ghost px-2.5 py-1 text-[11px]">Attach</button>
+                      <button onclick="dismissLocalOrphan('${o.orphanId}')" class="vault-btn-ghost px-2 py-1 text-[11px]">Dismiss</button>
+                    </div>
+                  </div>
+                `).join('') +
+                discoveredDriveOrphans.map((df) => `
+                  <div class="p-3 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs" style="background-color: var(--bg); border: 1px solid var(--border);">
+                    <div>
+                      <div class="font-semibold">${df.driveFolderName} <span class="font-mono text-[11px]" style="color: var(--brass);">[Drive Folder Orphan · ${(df.files || []).length} file(s)]</span></div>
+                      <div class="text-[11px]" style="color: var(--muted);">Files: ${(df.files || []).map((f) => f.fileName).join(', ') || 'Empty folder'}</div>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                      <button onclick="adoptDriveOrphanFolder('${df.driveFolderId}')" class="vault-btn-primary px-2.5 py-1 text-[11px]">Recover to Vault</button>
+                      <a href="${df.driveFolderUrl}" target="_blank" rel="noopener noreferrer" class="vault-btn-ghost px-2.5 py-1 text-[11px]">Open in Drive ↗</a>
+                    </div>
+                  </div>
+                `).join('') +
+                `</div>`
+          }
+        </div>
+      `);
+
+      // 3. Model Pictures & Thumbnail Backfill (#4)
+      sections.push(`
+        <div class="vault-card p-5 space-y-3">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h3 class="text-xs font-bold uppercase tracking-wider">3. Missing Model Pictures (${missingPics.length})</h3>
+              <p class="text-[11px]" style="color: var(--muted);">Generate a 3D geometry render, extract embedded 3MF/ZIP thumbnails, or retrieve the OpenGraph picture from the source URL.</p>
+            </div>
+            ${
+              missingPics.length > 0
+                ? `<button onclick="batchGenerateMissingPictures()" class="vault-btn-primary px-2.5 py-1 text-[11px]">Generate All (${missingPics.length})</button>`
+                : ''
+            }
+          </div>
+          ${
+            missingPics.length === 0
+              ? `<div class="text-xs py-2" style="color: var(--muted);">✓ All models have preview pictures.</div>`
+              : `<div class="space-y-2">` + missingPics.map((m) => `
+                  <div class="p-3 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs" style="background-color: var(--bg); border: 1px solid var(--border);">
+                    <div>
+                      <div class="font-semibold">${m.title}</div>
+                      <div class="text-[11px]" style="color: var(--muted);">Files: ${(m.files || []).map((f) => f.fileName).join(', ') || 'None'} · Source: ${m.source?.url || originText(m)}</div>
+                    </div>
+                    <div class="flex items-center gap-1.5 flex-wrap shrink-0">
+                      <button onclick="generateSnapshotForModel('${m.id}')" class="vault-btn-primary px-2.5 py-1 text-[11px]">Generate 3D Snapshot</button>
+                      <button onclick="extractPictureFromDriveArchive('${m.id}')" class="vault-btn-ghost px-2.5 py-1 text-[11px]">Extract from 3MF/STL</button>
+                      ${
+                        /^https?:\/\//i.test(m.source?.url || '')
+                          ? `<button onclick="retrievePictureFromSourceUrl('${m.id}')" class="vault-btn-ghost px-2.5 py-1 text-[11px]">Retrieve from URL</button>`
+                          : ''
+                      }
+                    </div>
+                  </div>
+                `).join('') + `</div>`
+          }
+        </div>
+      `);
+
+      // 4. Source Reference / URL Integrity (#5)
+      sections.push(`
+        <div class="vault-card p-5 space-y-3">
+          <div>
+            <h3 class="text-xs font-bold uppercase tracking-wider">4. Missing Source Reference / URL (${missingSources.length})</h3>
+            <p class="text-[11px]" style="color: var(--muted);">Every model must have a valid external URL or recorded local/personal CAD origin.</p>
+          </div>
+          ${
+            missingSources.length === 0
+              ? `<div class="text-xs py-2" style="color: var(--muted);">✓ All models have a verified source URL or origin reference.</div>`
+              : `<div class="space-y-2">` + missingSources.map((m) => `
+                  <div class="p-3 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs" style="background-color: var(--bg); border: 1px solid var(--border);">
+                    <div>
+                      <div class="font-semibold">${m.title}</div>
+                      <div class="text-[11px]" style="color: var(--muted);">Current source: ${originText(m)} · Author: ${m.source?.author || '—'}</div>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap shrink-0">
+                      <input id="qaSourceInput_${m.id}" type="text" placeholder="https://... or origin note" class="vault-input px-2.5 py-1 text-xs w-56" />
+                      <button onclick="saveQaSourceReference('${m.id}')" class="vault-btn-primary px-2.5 py-1 text-[11px]">Save URL</button>
+                      <button onclick="markQaModelAsPersonalOrigin('${m.id}')" class="vault-btn-ghost px-2.5 py-1 text-[11px]">Mark Personal CAD</button>
+                    </div>
+                  </div>
+                `).join('') + `</div>`
+          }
+        </div>
+      `);
+
+      // 5. Archive Categorization (#6)
+      sections.push(`
+        <div class="vault-card p-5 space-y-3">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h3 class="text-xs font-bold uppercase tracking-wider">5. Uncategorized Models (${uncategorized.length})</h3>
+              <p class="text-[11px]" style="color: var(--muted);">Assign structured archive categories for filtering and browsing.</p>
+            </div>
+            ${
+              uncategorized.length > 0
+                ? `<button onclick="batchAutoCategorizeModels()" class="vault-btn-ghost px-2.5 py-1 text-[11px]">Auto-Categorize All (${uncategorized.length})</button>`
+                : ''
+            }
+          </div>
+          ${
+            uncategorized.length === 0
+              ? `<div class="text-xs py-2" style="color: var(--muted);">✓ All models are categorized.</div>`
+              : `<div class="space-y-2">` + uncategorized.map((m) => {
+                  const suggested = inferCategoryFromText(m.title);
+                  return `
+                    <div class="p-3 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs" style="background-color: var(--bg); border: 1px solid var(--border);">
+                      <div>
+                        <div class="font-semibold">${m.title}</div>
+                        <div class="text-[11px]" style="color: var(--muted);">Suggested: <strong style="color: var(--text);">${suggested}</strong></div>
+                      </div>
+                      <div class="flex items-center gap-2 shrink-0">
+                        <select onchange="saveQaCategory('${m.id}', this.value)" class="vault-input px-2.5 py-1 text-xs">
+                          ${VAULT_CATEGORIES.map((c) => `<option value="${c}" ${(m.category || 'Uncategorized') === c ? 'selected' : ''}>${c}</option>`).join('')}
+                        </select>
+                        ${
+                          suggested !== 'Uncategorized'
+                            ? `<button onclick="saveQaCategory('${m.id}', '${suggested}')" class="vault-btn-primary px-2.5 py-1 text-[11px]">Apply Suggested</button>`
+                            : ''
+                        }
+                      </div>
+                    </div>
+                  `;
+                }).join('') + `</div>`
+          }
+        </div>
+      `);
+
+      reportEl.innerHTML = sections.join('');
     }
 
     async function saveAndTestCloudConfig() {

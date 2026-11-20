@@ -52,6 +52,10 @@ function doGet(e) {
       });
     }
 
+    if (action === 'auditDrive') {
+      return jsonResponse_(handleAuditDrive_());
+    }
+
     return jsonResponse_({ ok: false, error: 'Unknown action: ' + action }, 400);
   } catch (err) {
     return jsonResponse_({ ok: false, error: err.message, stack: err.stack });
@@ -89,6 +93,14 @@ function doPost(e) {
 
     if (action === 'ingestUrl') {
       return jsonResponse_(handleIngestUrl_(payload));
+    }
+
+    if (action === 'scrapeThumbnail') {
+      return jsonResponse_(handleScrapeThumbnail_(payload));
+    }
+
+    if (action === 'auditDrive') {
+      return jsonResponse_(handleAuditDrive_());
     }
 
     if (action === 'saveMetadata') {
@@ -366,6 +378,96 @@ function handleIngestUrl_(payload) {
     sourceType: sourceType,
     driveFolderUrl: folder.getUrl(),
     record: record
+  };
+}
+
+/**
+ * Scrapes a model page URL for its OpenGraph thumbnail image and returns base64 + URL.
+ */
+function handleScrapeThumbnail_(payload) {
+  const url = (payload.url || '').trim();
+  if (!url) return { ok: false, error: 'Missing url' };
+
+  const scraped = scrapePageMetadata_(url);
+  if (!scraped.image) {
+    return { ok: false, error: 'No OpenGraph preview image found on page', scraped: scraped };
+  }
+
+  let base64 = '';
+  let mimeType = 'image/png';
+  try {
+    const imgRes = withBackoff_(() => UrlFetchApp.fetch(scraped.image, { muteHttpExceptions: true }));
+    if (imgRes.getResponseCode() === 200) {
+      const blob = imgRes.getBlob();
+      mimeType = blob.getContentType() || 'image/png';
+      base64 = Utilities.base64Encode(blob.getBytes());
+    }
+  } catch (e) {}
+
+  return {
+    ok: true,
+    imageUrl: scraped.image,
+    mimeType: mimeType,
+    base64: base64,
+    title: scraped.title,
+    author: scraped.author
+  };
+}
+
+/**
+ * Lists all model folders and files under /3D Model Vault/Models in Google Drive
+ * so the frontend QA/QC audit can reconcile metadata records against actual Drive files
+ * and detect orphaned Drive folders/files with no metadata record.
+ */
+function handleAuditDrive_() {
+  const cfg = getConfig_();
+  const rootIter = DriveApp.getRootFolder().getFoldersByName(cfg.rootFolderName);
+  if (!rootIter.hasNext()) {
+    return { ok: true, folders: [], rootFolderName: cfg.rootFolderName };
+  }
+  const root = rootIter.next();
+  const modelsIter = root.getFoldersByName('Models');
+  if (!modelsIter.hasNext()) {
+    return { ok: true, folders: [], rootFolderName: cfg.rootFolderName };
+  }
+  const modelsDir = modelsIter.next();
+  const folderIter = modelsDir.getFolders();
+  const folders = [];
+
+  while (folderIter.hasNext()) {
+    const folder = folderIter.next();
+    if (folder.isTrashed()) continue;
+    const fName = folder.getName();
+    const idMatch = fName.match(/(m_[a-z0-9]+)$/i);
+    const fileIter = folder.getFiles();
+    const files = [];
+    while (fileIter.hasNext()) {
+      const f = fileIter.next();
+      if (f.isTrashed()) continue;
+      const name = f.getName();
+      const ext = name.indexOf('.') > -1 ? name.split('.').pop().toLowerCase() : '';
+      files.push({
+        driveFileId: f.getId(),
+        fileName: name,
+        extension: ext,
+        sizeBytes: f.getSize(),
+        mimeType: f.getMimeType()
+      });
+    }
+    folders.push({
+      driveFolderId: folder.getId(),
+      driveFolderName: fName,
+      driveFolderUrl: folder.getUrl(),
+      inferredModelId: idMatch ? idMatch[1] : null,
+      createdAt: folder.getDateCreated().toISOString(),
+      files: files
+    });
+  }
+
+  return {
+    ok: true,
+    rootFolderName: cfg.rootFolderName,
+    folders: folders
   };
 }
 
