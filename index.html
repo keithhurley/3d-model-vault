@@ -389,6 +389,7 @@
             <button onclick="document.getElementById('importJsonInput').click()" class="vault-btn-ghost px-3 py-1.5 text-xs">Import JSON</button>
             <input id="importJsonInput" type="file" accept=".json" class="hidden" onchange="importVaultJson(event)" />
             <button onclick="pushAllToFirebase()" class="vault-btn-ghost px-3 py-1.5 text-xs">Push Local to Cloud</button>
+            <button onclick="copyDeviceSetupLink()" class="vault-btn-ghost px-3 py-1.5 text-xs">Copy Device Setup Link</button>
             <button onclick="resetDemoData()" class="vault-btn-ghost px-3 py-1.5 text-xs">Reset Demo</button>
           </div>
           <button onclick="saveAndTestCloudConfig()" class="vault-btn-primary px-4 py-1.5 text-xs">Test & Save</button>
