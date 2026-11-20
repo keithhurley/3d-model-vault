@@ -982,6 +982,55 @@
       scene.add(currentMesh);
     }
 
+    function renderGeometryToThumbnailDataUrl(geometry, width = 320, height = 220) {
+      if (!window.THREE || !geometry) return '';
+      let offRenderer = null;
+      let cloned = null;
+      let mat = null;
+      try {
+        offRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+        offRenderer.setSize(width, height, false);
+        const offScene = new THREE.Scene();
+        offScene.background = new THREE.Color(getThemeHex('--bg', 0x111827));
+
+        const offCam = new THREE.PerspectiveCamera(40, width / height, 1, 2000);
+        offCam.position.set(85, 70, 95);
+        offCam.lookAt(0, 0, 0);
+
+        offScene.add(new THREE.HemisphereLight(0xffffff, 0x222222, 0.95));
+        const dir = new THREE.DirectionalLight(0xffffff, 0.85);
+        dir.position.set(120, 180, 130);
+        offScene.add(dir);
+
+        cloned = geometry.clone();
+        cloned.computeBoundingBox();
+        const size = new THREE.Vector3();
+        cloned.boundingBox.getSize(size);
+        cloned.center();
+        const scale = 75 / (Math.max(size.x, size.y, size.z) || 1);
+
+        mat = new THREE.MeshStandardMaterial({
+          color: getThemeHex('--accent', 0xff5a1f),
+          roughness: 0.35,
+          metalness: 0.15
+        });
+        const mesh = new THREE.Mesh(cloned, mat);
+        mesh.scale.set(scale, scale, scale);
+        mesh.rotation.x = -Math.PI / 2;
+        offScene.add(mesh);
+
+        offRenderer.render(offScene, offCam);
+        return offRenderer.domElement.toDataURL('image/png');
+      } catch (e) {
+        console.warn('Thumbnail render failed:', e);
+        return '';
+      } finally {
+        if (cloned) cloned.dispose();
+        if (mat) mat.dispose();
+        if (offRenderer) offRenderer.dispose();
+      }
+    }
+
     // =========================================================================
     // NAVIGATION & CLEAN RENDERING
     // =========================================================================
@@ -1058,8 +1107,8 @@
               </div>
 
               ${
-                m.thumbnailDataUrl
-                  ? `<img src="${m.thumbnailDataUrl}" alt="${m.title}" class="w-full h-32 object-contain rounded-md mb-1" style="background: var(--bg); border: 1px solid var(--border);" />`
+                (m.thumbnailDataUrl || m.storage?.thumbnailFallbackUrl)
+                  ? `<img src="${m.thumbnailDataUrl || m.storage?.thumbnailFallbackUrl}" alt="${m.title}" class="w-full h-32 object-contain rounded-md mb-1" style="background: var(--bg); border: 1px solid var(--border);" />`
                   : ''
               }
 
@@ -1401,6 +1450,15 @@
         geom.boundingBox.getSize(size);
         const dims = `${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ${size.z.toFixed(1)}`;
         pendingCustomGeometry = geom;
+        const stlThumb = renderGeometryToThumbnailDataUrl(geom);
+        if (stlThumb) {
+          pendingThumbnailDataUrl = stlThumb;
+          pendingThumbnailBase64 = stlThumb.split(',')[1] || '';
+          if (thumbImg && thumbWrap) {
+            thumbImg.src = stlThumb;
+            thumbWrap.classList.remove('hidden');
+          }
+        }
         document.getElementById('formDims').value = dims;
         autoFilledAnySpec = true;
         statusEl.textContent = `Loaded STL: ${file.name} (${dims} mm)`;
@@ -1510,6 +1568,18 @@
               geom.boundingBox.getSize(size);
               const dims = `${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ${size.z.toFixed(1)}`;
               pendingCustomGeometry = geom;
+              if (!pendingThumbnailDataUrl) {
+                const zipStlThumb = renderGeometryToThumbnailDataUrl(geom);
+                if (zipStlThumb) {
+                  pendingThumbnailDataUrl = zipStlThumb;
+                  pendingThumbnailBase64 = zipStlThumb.split(',')[1] || '';
+                  if (thumbImg && thumbWrap) {
+                    thumbImg.src = zipStlThumb;
+                    thumbWrap.classList.remove('hidden');
+                  }
+                  extracted.push('3D thumbnail');
+                }
+              }
               document.getElementById('formDims').value = dims;
               autoFilledAnySpec = true;
               extracted.push(dims + ' mm');
