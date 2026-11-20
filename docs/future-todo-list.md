@@ -1,16 +1,15 @@
 # 3D Model Vault — Future Additions & Phase 2 TODO
 
 > [!NOTE]
-> Items **#2, #4, #5, #6, #8, and #9 (QA/QC File-Metadata Reconciliation)** have been implemented in `index.html` and `backend/Code.gs`. Remaining items are queued for future implementation.
+> All planned items (**#1–#9**) have been implemented in `index.html` and `backend/Code.gs`.
 
 ---
 
-## 1. Full Vault Backups (Files + Metadata)
-- [ ] **Backup actual files, not just metadata:** Extend backup/export beyond Firebase JSON metadata so the underlying 3D files in Google Drive are included.
-- [ ] **Explore backup formats & targets:**
-  - Manual or scheduled full-vault archive (e.g., Drive files + metadata JSON bundled together).
-  - Incremental local mirror / secondary cloud backup so large libraries don't require re-downloading everything each time.
-  - Restore / import verification path to confirm a backup can rebuild both Drive files and Firebase links.
+## 1. Full Vault Backups (Files + Metadata) ✅ *(Completed)*
+- [x] **Backup actual files, not just metadata:** Added **Export Full Backup (.ZIP)** (`exportFullVaultZip`) in **Setup → Cloud Sync & Backups**, bundling `vault-metadata.json` (models, categories, manifest) with all 3D model/slicer binaries from Google Drive.
+- [x] **Incremental local mirror & full restore:**
+  - **Incremental Mirror to Local Folder** (`mirrorVaultToLocalFolder`) syncs `vault-metadata.json` and only downloads new or changed Drive files into a local backup directory.
+  - **Restore Full Backup (.ZIP)** (`restoreFullVaultZip`) restores metadata, custom categories, and re-uploads backed-up 3D files into Google Drive + Firebase.
 
 ## 2. Slicer File Storage & Print-Ready Assets ✅ *(Completed)*
 - [x] **Non-perishable original file protection:** The primary ingested file (`isOriginal: true`, `locked: true`) is permanently locked as a non-perishable part of the model record (`🔒 ORIGINAL` badge on cards and `Protected` in the slideout drawer).
@@ -43,9 +42,9 @@
 - [x] **Auto-categorization & bulk organization:** Keyword-based category suggestion during file drop/title entry, plus 1-click bulk **Auto-Categorize All** in the **QA/QC** tab.
 - [x] **Filter & browse by category:** Added category badges on Library & Queue cards, category dropdown filtering in the Library, and category editing in the model drawer.
 
-## 7. UI Polish: Field Values vs. Placeholders (Watermarks)
-- [ ] **Clearer visual distinction:** Improve contrast, opacity, and styling (e.g., muted/italicized placeholder watermarks vs. crisp, high-contrast entered values) across form inputs and detail fields so empty vs. populated fields are immediately distinguishable.
-- [ ] **Audit all forms & modals:** Review ingestion forms, model edit panels, settings/config inputs, and print log fields for consistent placeholder vs. value styling.
+## 7. UI Polish: Field Values vs. Placeholders (Watermarks) ✅ *(Completed)*
+- [x] **Clearer visual distinction:** Added theme-aware `--placeholder` tokens across Workshop, Daylight, and Blueprint themes; `.vault-input::placeholder` renders in muted italic (`font-weight: 400`), while populated inputs/textareas (`:not(:placeholder-shown)`) render in crisp `font-weight: 500` with stronger borders and an accent focus ring.
+- [x] **Consistent across all forms & modals:** Applied globally via `.vault-input` across ingestion forms, quick-edit drawer inputs, print logs, QA/QC backfill, and Setup configuration.
 
 ## 8. Clarify / Unify Material vs. Target Filament ✅ *(Completed)*
 - [x] **Resolve overlap between `Material` and `Target Filament`:** Clearly distinguished `Material Type` (e.g., `PETG / PLA / ASA`) from `Target Filament Spool (Optional)` (e.g., `Polymaker PETG Dark Grey`), and added editable fields for both in the model drawer.

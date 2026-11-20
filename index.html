@@ -18,6 +18,7 @@
       --border-strong: #4a4a52;
       --text: #f3f2ee;
       --muted: #8e8d96;
+      --placeholder: rgba(142, 141, 150, 0.48);
       --accent: #ff5a1f;
       --accent-fg: #111113;
       --accent-soft: rgba(255, 90, 31, 0.12);
@@ -36,6 +37,7 @@
       --border-strong: #2b2a27;
       --text: #191917;
       --muted: #6b675e;
+      --placeholder: rgba(107, 103, 94, 0.48);
       --accent: #c84b22;
       --accent-fg: #ffffff;
       --accent-soft: rgba(200, 75, 34, 0.1);
@@ -54,6 +56,7 @@
       --border-strong: #5aa9ec;
       --text: #f0f7ff;
       --muted: #86b0de;
+      --placeholder: rgba(134, 176, 222, 0.45);
       --accent: #38d9f5;
       --accent-fg: #06182e;
       --accent-soft: rgba(56, 217, 245, 0.12);
@@ -85,11 +88,24 @@
       background-color: var(--bg);
       border: 1px solid var(--border);
       color: var(--text);
+      font-weight: 500;
       border-radius: 7px;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .vault-input::placeholder {
+      color: var(--placeholder);
+      font-style: italic;
+      font-weight: 400;
+      opacity: 1;
+    }
+    input.vault-input:not(:placeholder-shown),
+    textarea.vault-input:not(:placeholder-shown) {
+      border-color: var(--border-strong);
     }
     .vault-input:focus {
       outline: none;
       border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-soft);
     }
 
     .vault-btn-primary {
@@ -120,6 +136,26 @@
     .drawer-panel {
       background-color: var(--surface);
       border-left: 1px solid var(--border-strong);
+    }
+
+    .font-mono {
+      font-variant-numeric: tabular-nums;
+    }
+
+    .thumb-frame {
+      height: 9rem;
+      background: radial-gradient(circle at center, var(--surface-2) 0%, var(--bg) 78%);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    @keyframes pulseDot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.8); }
+    }
+    .pulse-dot {
+      animation: pulseDot 1.6s ease-in-out infinite;
     }
   </style>
 </head>
@@ -463,6 +499,24 @@
           </div>
           <button onclick="saveAndTestCloudConfig()" class="vault-btn-primary px-4 py-1.5 text-xs">Test & Save</button>
         </div>
+
+        <div class="pt-3 mt-1 space-y-2" style="border-top: 1px solid var(--border);">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <div class="text-xs font-semibold">Full Vault Backups (Files + Metadata)</div>
+              <p class="text-[11px]" style="color: var(--muted);">
+                Export or restore a complete <code>.zip</code> snapshot including Google Drive 3D files, or incrementally mirror only new/changed files to a local backup folder.
+              </p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <button id="exportFullZipBtn" onclick="exportFullVaultZip()" class="vault-btn-primary px-3 py-1.5 text-xs">Export Full Backup (.ZIP)</button>
+            <button id="restoreFullZipBtn" onclick="document.getElementById('importFullZipInput').click()" class="vault-btn-ghost px-3 py-1.5 text-xs">Restore Full Backup (.ZIP)</button>
+            <input id="importFullZipInput" type="file" accept=".zip" class="hidden" onchange="restoreFullVaultZip(event)" />
+            <button id="mirrorLocalBackupBtn" onclick="mirrorVaultToLocalFolder()" class="vault-btn-ghost px-3 py-1.5 text-xs">Incremental Mirror to Local Folder</button>
+          </div>
+        </div>
+
         <div id="importStatusMsg" class="text-xs hidden" style="color: var(--accent);"></div>
       </div>
 
@@ -526,6 +580,8 @@
 
         <div id="drawerBody" class="space-y-5"></div>
       </div>
+
+      <div id="drawerFooter" style="background-color: var(--surface); border-top: 1px solid var(--border);" class="px-5 py-3 flex items-center justify-between gap-2 shrink-0"></div>
     </aside>
   </div>
 
@@ -1518,6 +1574,20 @@
       renderCategoryManager();
     }
 
+    function renderStatusPill(status) {
+      const st = (status || 'archived').toLowerCase();
+      if (st === 'printing') {
+        return `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider" style="background-color: var(--accent-soft); color: var(--accent);"><span class="w-1.5 h-1.5 rounded-full pulse-dot" style="background-color: var(--accent);"></span>Printing</span>`;
+      }
+      if (st === 'queued') {
+        return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider" style="background-color: var(--accent-soft); color: var(--accent);">Queued</span>`;
+      }
+      if (st === 'printed') {
+        return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider" style="background-color: rgba(16, 185, 129, 0.14); color: #10b981;">✓ Printed</span>`;
+      }
+      return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-wider" style="background-color: var(--surface-2); color: var(--muted);">Archived</span>`;
+    }
+
     function renderLibraryGrid() {
       const q = (document.getElementById('searchInput')?.value || '').toLowerCase().trim();
       const catFilter = document.getElementById('filterCategory')?.value || 'all';
@@ -1562,7 +1632,7 @@
 
         return `
           <div onclick="openModelDrawer('${m.id}')" class="vault-card p-5 cursor-pointer flex flex-col justify-between gap-4">
-            <div class="space-y-2">
+            <div class="space-y-2.5">
               <div class="flex items-center justify-between text-[11px] font-medium" style="color: var(--muted);">
                 <div class="flex items-center gap-1.5 min-w-0">
                   <span class="truncate">${originText(m)}</span>
@@ -1584,16 +1654,16 @@
                     class="text-xs transition hover:scale-110"
                     style="color: ${isFav ? 'var(--brass)' : 'var(--muted)'};"
                   >${isFav ? '★' : '☆'}</button>
-                  <span class="uppercase tracking-wider" style="color: ${isQueued ? 'var(--accent)' : 'var(--muted)'};">${m.workflow.status}</span>
+                  ${renderStatusPill(m.workflow.status)}
                 </div>
               </div>
 
               ${
                 picUrl
-                  ? `<img src="${picUrl}" alt="${m.title}" class="w-full h-32 object-contain rounded-md mb-1" style="background: var(--bg); border: 1px solid var(--border);" />`
-                  : `<div class="w-full h-24 rounded-md mb-1 flex items-center justify-between px-3 text-[11px]" style="background: var(--bg); border: 1px dashed var(--border);">
+                  ? `<div class="thumb-frame w-full flex items-center justify-center p-1.5"><img src="${picUrl}" alt="${m.title}" class="w-full h-full object-contain" /></div>`
+                  : `<div class="thumb-frame w-full flex flex-col items-center justify-center gap-2 px-3 text-[11px]" style="border-style: dashed;">
                        <span style="color: var(--muted);">No preview picture</span>
-                       <button onclick="event.stopPropagation(); generateSnapshotForModel('${m.id}')" class="vault-btn-ghost px-2 py-1 text-[10px]">Generate 3D Snapshot</button>
+                       <button onclick="event.stopPropagation(); generateSnapshotForModel('${m.id}')" class="vault-btn-ghost px-2.5 py-1 text-[10px]">Generate 3D Snapshot</button>
                      </div>`
               }
 
@@ -1984,41 +2054,71 @@
           >${(m.nextTimeSummary || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
         </div>
 
-        <!-- Past Print History -->
-        <div class="space-y-2">
-          <div class="text-xs font-semibold" style="color: var(--muted);">Print History (${(m.printLogs || []).length})</div>
-          ${
-            (m.printLogs || []).length === 0
-              ? `<div class="text-xs py-2" style="color: var(--muted);">No prints logged yet.</div>`
-              : (m.printLogs || []).map((log) => `
-                <div class="p-3 rounded-lg text-xs space-y-1" style="background-color: var(--bg); border: 1px solid var(--border);">
-                  <div class="flex items-center justify-between font-medium">
-                    <span>${log.outcome === 'success' ? 'Success' : log.outcome === 'failed' ? 'Failed' : 'Needs Tweaks'} · ${log.filamentUsed || 'Filament'}</span>
-                    <span class="font-mono text-[11px]" style="color: var(--muted);">${log.date}</span>
+        <!-- Collapsible Past Print History -->
+        <details class="p-3.5 rounded-lg" style="background-color: var(--bg); border: 1px solid var(--border);" ${(m.printLogs || []).length > 0 ? 'open' : ''}>
+          <summary class="text-xs font-semibold cursor-pointer select-none flex items-center justify-between" style="color: var(--text);">
+            <span>Print History (${(m.printLogs || []).length})</span>
+            <span class="text-[10px] font-mono" style="color: var(--muted);">Toggle</span>
+          </summary>
+          <div class="space-y-2 mt-3">
+            ${
+              (m.printLogs || []).length === 0
+                ? `<div class="text-xs py-1" style="color: var(--muted);">No prints logged yet.</div>`
+                : (m.printLogs || []).map((log) => `
+                  <div class="p-3 rounded-lg text-xs space-y-1" style="background-color: var(--surface); border: 1px solid var(--border);">
+                    <div class="flex items-center justify-between font-medium">
+                      <span>${log.outcome === 'success' ? 'Success' : log.outcome === 'failed' ? 'Failed' : 'Needs Tweaks'} · ${log.filamentUsed || 'Filament'}</span>
+                      <span class="font-mono text-[11px]" style="color: var(--muted);">${log.date}</span>
+                    </div>
+                    <p style="color: var(--muted);">${log.notes}</p>
+                    ${log.forNextTime ? `<p style="color: var(--brass);">↳ ${log.forNextTime}</p>` : ''}
                   </div>
-                  <p style="color: var(--muted);">${log.notes}</p>
-                  ${log.forNextTime ? `<p style="color: var(--brass);">↳ ${log.forNextTime}</p>` : ''}
-                </div>
-              `).join('')
-          }
-        </div>
-
-        <!-- Log New Print (Bottom) -->
-        <div class="p-3.5 rounded-lg space-y-2.5" style="background-color: var(--bg); border: 1px solid var(--border);">
-          <div class="text-xs font-semibold">Log a Print</div>
-          <div class="grid grid-cols-2 gap-2">
-            <select id="logOutcome" class="vault-input px-2.5 py-1.5 text-xs">
-              <option value="success">Success</option>
-              <option value="needs_tweaks">Needs Tweaks</option>
-              <option value="failed">Failed</option>
-            </select>
-            <input id="logFilament" type="text" placeholder="Filament used" class="vault-input px-2.5 py-1.5 text-xs" />
+                `).join('')
+            }
           </div>
-          <textarea id="logNotes" rows="2" placeholder="How did it print?" class="vault-input w-full px-2.5 py-1.5 text-xs resize-y"></textarea>
-          <input id="logNextTime" type="text" placeholder="Note for next time (updates pinned note above)..." class="vault-input w-full px-2.5 py-1.5 text-xs" />
-          <button onclick="addPrintLog('${m.id}')" class="vault-btn-primary w-full py-2 text-xs">Log Print Result</button>
-        </div>
+        </details>
+
+        <!-- Collapsible Log New Print -->
+        <details class="p-3.5 rounded-lg" style="background-color: var(--bg); border: 1px solid var(--border);">
+          <summary class="text-xs font-semibold cursor-pointer select-none flex items-center justify-between">
+            <span>+ Log a Print</span>
+            <span class="text-[10px] font-mono" style="color: var(--muted);">Expand</span>
+          </summary>
+          <div class="space-y-2.5 mt-3">
+            <div class="grid grid-cols-2 gap-2">
+              <select id="logOutcome" class="vault-input px-2.5 py-1.5 text-xs">
+                <option value="success">Success</option>
+                <option value="needs_tweaks">Needs Tweaks</option>
+                <option value="failed">Failed</option>
+              </select>
+              <input id="logFilament" type="text" placeholder="Filament used" class="vault-input px-2.5 py-1.5 text-xs" />
+            </div>
+            <textarea id="logNotes" rows="2" placeholder="How did it print?" class="vault-input w-full px-2.5 py-1.5 text-xs resize-y"></textarea>
+            <input id="logNextTime" type="text" placeholder="Note for next time (updates pinned note above)..." class="vault-input w-full px-2.5 py-1.5 text-xs" />
+            <button onclick="addPrintLog('${m.id}')" class="vault-btn-primary w-full py-2 text-xs">Log Print Result</button>
+          </div>
+        </details>
       `;
+
+      const footerEl = document.getElementById('drawerFooter');
+      if (footerEl) {
+        footerEl.innerHTML = `
+          <div class="flex items-center gap-2 min-w-0">
+            ${renderStatusPill(m.workflow.status)}
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <button onclick="toggleQueueStatus('${m.id}')" class="${isQueued ? 'vault-btn-primary' : 'vault-btn-ghost'} px-3 py-1.5 text-xs">
+              ${isQueued ? 'In Queue' : '+ Queue'}
+            </button>
+            <button onclick="setWorkflowStatus('${m.id}', 'printing')" class="vault-btn-ghost px-3 py-1.5 text-xs">
+              Start Print
+            </button>
+            <button onclick="setWorkflowStatus('${m.id}', 'printed')" class="vault-btn-primary px-3 py-1.5 text-xs">
+              Mark Printed
+            </button>
+          </div>
+        `;
+      }
     }
 
     // =========================================================================
@@ -3960,6 +4060,275 @@
         statusEl.classList.remove('hidden');
       }
       event.target.value = '';
+    }
+
+    async function exportFullVaultZip() {
+      const statusEl = document.getElementById('importStatusMsg');
+      const btn = document.getElementById('exportFullZipBtn');
+      if (!window.JSZip) {
+        if (statusEl) {
+          statusEl.textContent = 'JSZip library is required for full ZIP backups.';
+          statusEl.classList.remove('hidden');
+        }
+        return;
+      }
+
+      if (btn) { btn.disabled = true; btn.textContent = 'Preparing Full Backup...'; }
+      if (statusEl) {
+        statusEl.textContent = 'Building full vault backup (metadata + Drive files)...';
+        statusEl.classList.remove('hidden');
+      }
+
+      try {
+        const zip = new JSZip();
+        const fileManifest = [];
+        let downloadedFiles = 0;
+        let skippedFiles = 0;
+
+        const allDriveFiles = [];
+        models.forEach((m) => {
+          normalizeModelFiles(m);
+          (m.files || []).forEach((f) => {
+            if (f.driveFileId && cloudConfig.gasUrl) {
+              allDriveFiles.push({ model: m, file: f });
+            } else {
+              skippedFiles++;
+            }
+          });
+        });
+
+        for (let i = 0; i < allDriveFiles.length; i++) {
+          const { model: m, file: f } = allDriveFiles[i];
+          const slug = (m.title || 'model').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) || 'model';
+          const zipFolder = `files/${m.id}_${slug}`;
+          const zipPath = `${zipFolder}/${f.fileName}`;
+
+          if (statusEl) statusEl.textContent = `Backing up file ${i + 1} of ${allDriveFiles.length}: ${f.fileName}...`;
+          if (btn) btn.textContent = `Packing ${i + 1}/${allDriveFiles.length}...`;
+
+          try {
+            const fetched = await fetchModelDriveFileBytes(f);
+            if (fetched) {
+              zip.file(zipPath, fetched.bytes);
+              fileManifest.push({
+                modelId: m.id,
+                fileId: f.fileId,
+                fileName: f.fileName,
+                zipPath
+              });
+              downloadedFiles++;
+            }
+          } catch (err) {
+            console.warn(`Skipped ${f.fileName} during backup:`, err);
+            skippedFiles++;
+          }
+        }
+
+        zip.file(
+          'vault-metadata.json',
+          JSON.stringify(
+            {
+              schemaVersion: '2.0',
+              exportedAt: new Date().toISOString(),
+              categories: vaultCategories,
+              models: models.map(serializeModel),
+              fileManifest
+            },
+            null,
+            2
+          )
+        );
+
+        if (statusEl) statusEl.textContent = 'Compressing full vault archive...';
+        const blob = await zip.generateAsync({ type: 'blob' });
+        const dateStr = new Date().toISOString().slice(0, 10);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `3d-model-vault-full-backup-${dateStr}.zip`;
+        a.click();
+
+        if (statusEl) {
+          statusEl.textContent = `Full backup complete: ${models.length} model(s), ${downloadedFiles} 3D file(s) bundled` +
+            (skippedFiles > 0 ? ` (${skippedFiles} local/unlinked file(s) metadata-only).` : '.');
+        }
+      } catch (err) {
+        if (statusEl) statusEl.textContent = `Full backup failed: ${err.message}`;
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Export Full Backup (.ZIP)'; }
+      }
+    }
+
+    async function restoreFullVaultZip(event) {
+      const file = event.target.files?.[0];
+      event.target.value = '';
+      if (!file) return;
+      const statusEl = document.getElementById('importStatusMsg');
+      const btn = document.getElementById('restoreFullZipBtn');
+
+      if (!window.JSZip) return;
+      if (btn) { btn.disabled = true; btn.textContent = 'Restoring...'; }
+      if (statusEl) {
+        statusEl.textContent = `Reading ${file.name}...`;
+        statusEl.classList.remove('hidden');
+      }
+
+      try {
+        const zip = await JSZip.loadAsync(file);
+        const metaFile = zip.file('vault-metadata.json');
+        if (!metaFile) throw new Error('Missing vault-metadata.json inside backup ZIP');
+
+        const parsed = JSON.parse(await metaFile.async('string'));
+        const importedModels = Array.isArray(parsed) ? parsed : parsed.models;
+        if (!Array.isArray(importedModels)) throw new Error('Invalid models array in vault-metadata.json');
+
+        if (Array.isArray(parsed.categories) && parsed.categories.length > 0) {
+          vaultCategories = ensureUncategorizedLast(parsed.categories);
+          try { localStorage.setItem(CATEGORIES_KEY, JSON.stringify(vaultCategories)); } catch (e) {}
+        }
+
+        const manifest = Array.isArray(parsed.fileManifest) ? parsed.fileManifest : [];
+        let restoredDriveCount = 0;
+
+        if (cloudConfig.gasUrl && manifest.length > 0) {
+          for (let i = 0; i < manifest.length; i++) {
+            const entry = manifest[i];
+            const zipEntry = zip.file(entry.zipPath);
+            const targetModel = importedModels.find((m) => m.id === entry.modelId);
+            if (!zipEntry || !targetModel) continue;
+
+            if (statusEl) statusEl.textContent = `Restoring file ${i + 1} of ${manifest.length} to Drive: ${entry.fileName}...`;
+            try {
+              const ab = await zipEntry.async('arraybuffer');
+              const blobFile = new File([ab], entry.fileName, { type: 'application/octet-stream' });
+              const up = await uploadFileToDrive(blobFile, targetModel, (msg) => {
+                if (statusEl) statusEl.textContent = `Restoring ${entry.fileName}: ${msg}`;
+              });
+              if (up.ok && up.driveFileId) {
+                const fileRec = (targetModel.files || []).find((f) => f.fileId === entry.fileId || f.fileName === entry.fileName);
+                if (fileRec) fileRec.driveFileId = up.driveFileId;
+                targetModel.storage = {
+                  ...(targetModel.storage || {}),
+                  driveFolderId: up.driveFolderId,
+                  driveFolderUrl: up.driveFolderUrl
+                };
+                restoredDriveCount++;
+              }
+            } catch (err) {
+              console.warn(`Could not restore ${entry.fileName} to Drive:`, err);
+            }
+          }
+        }
+
+        models = importedModels;
+        closeDrawer();
+        saveModels();
+        if (cloudConfig.firebaseUrl) {
+          await syncCategoriesToFirebase();
+          for (const m of models) {
+            await syncModelToFirebase(m);
+          }
+        }
+
+        if (statusEl) {
+          statusEl.textContent = cloudConfig.gasUrl
+            ? `Restored ${models.length} model(s) and re-uploaded ${restoredDriveCount} file(s) to Google Drive.`
+            : `Restored ${models.length} model(s) locally (${manifest.length} binary file(s) in ZIP — connect Apps Script to re-upload to Drive).`;
+        }
+      } catch (err) {
+        if (statusEl) statusEl.textContent = `Restore failed: ${err.message}`;
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Restore Full Backup (.ZIP)'; }
+      }
+    }
+
+    async function mirrorVaultToLocalFolder() {
+      const statusEl = document.getElementById('importStatusMsg');
+      const btn = document.getElementById('mirrorLocalBackupBtn');
+      if (!('showDirectoryPicker' in window)) {
+        if (statusEl) {
+          statusEl.textContent = 'Incremental local folder mirroring requires a Chromium browser (Chrome, Edge, Brave). Use "Export Full Backup (.ZIP)" instead.';
+          statusEl.classList.remove('hidden');
+        }
+        return;
+      }
+
+      try {
+        const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+        if (btn) { btn.disabled = true; btn.textContent = 'Mirroring...'; }
+        if (statusEl) {
+          statusEl.textContent = `Mirroring metadata & files to "${dirHandle.name}"...`;
+          statusEl.classList.remove('hidden');
+        }
+
+        // Write vault-metadata.json
+        const metaHandle = await dirHandle.getFileHandle('vault-metadata.json', { create: true });
+        const metaWritable = await metaHandle.createWritable();
+        await metaWritable.write(
+          JSON.stringify(
+            {
+              schemaVersion: '2.0',
+              mirroredAt: new Date().toISOString(),
+              categories: vaultCategories,
+              models: models.map(serializeModel)
+            },
+            null,
+            2
+          )
+        );
+        await metaWritable.close();
+
+        const filesRoot = await dirHandle.getDirectoryHandle('files', { create: true });
+        let downloaded = 0;
+        let skippedExisting = 0;
+
+        for (const m of models) {
+          normalizeModelFiles(m);
+          const driveFiles = (m.files || []).filter((f) => f.driveFileId && cloudConfig.gasUrl);
+          if (driveFiles.length === 0) continue;
+
+          const slug = (m.title || 'model').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) || 'model';
+          const modelDir = await filesRoot.getDirectoryHandle(`${m.id}_${slug}`, { create: true });
+
+          for (const f of driveFiles) {
+            let needsDownload = true;
+            try {
+              const existingHandle = await modelDir.getFileHandle(f.fileName);
+              const existingFile = await existingHandle.getFile();
+              if (!f.sizeBytes || existingFile.size === f.sizeBytes) {
+                needsDownload = false;
+                skippedExisting++;
+              }
+            } catch (e) {}
+
+            if (needsDownload) {
+              if (statusEl) statusEl.textContent = `Downloading ${f.fileName} to "${dirHandle.name}"...`;
+              try {
+                const fetched = await fetchModelDriveFileBytes(f);
+                if (fetched) {
+                  const fh = await modelDir.getFileHandle(f.fileName, { create: true });
+                  const w = await fh.createWritable();
+                  await w.write(fetched.bytes);
+                  await w.close();
+                  downloaded++;
+                }
+              } catch (err) {
+                console.warn(`Mirror skipped ${f.fileName}:`, err);
+              }
+            }
+          }
+        }
+
+        if (statusEl) {
+          statusEl.textContent = `Incremental mirror to "${dirHandle.name}" complete: ${downloaded} new/updated file(s) downloaded, ${skippedExisting} unchanged file(s) skipped.`;
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError' && statusEl) {
+          statusEl.textContent = `Local mirror failed: ${err.message}`;
+          statusEl.classList.remove('hidden');
+        }
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Incremental Mirror to Local Folder'; }
+      }
     }
 
     function resetDemoData() {
