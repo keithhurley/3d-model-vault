@@ -3493,8 +3493,19 @@
         const sep = cloudConfig.gasUrl.includes('?') ? '&' : '?';
         const sec = cloudConfig.apiSecret ? `&secret=${encodeURIComponent(cloudConfig.apiSecret)}` : '';
         const res = await fetch(`${cloudConfig.gasUrl}${sep}action=auditDrive${sec}`);
-        const data = await res.json();
-        if (!data.ok) throw new Error(data.error || 'Audit failed');
+        const rawText = await res.text();
+        let data;
+        try {
+          data = JSON.parse(rawText);
+        } catch (parseErr) {
+          throw new Error('Apps Script returned a non-JSON response. Make sure your Web App is deployed with "Who has access: Anyone".');
+        }
+        if (!data.ok) {
+          if (String(data.error || '').includes('Unknown action')) {
+            throw new Error('Your deployed Google Apps Script is running an older version of backend/Code.gs. Copy the latest backend/Code.gs into Apps Script and click Deploy → Manage deployments → Edit → New version → Deploy.');
+          }
+          throw new Error(data.error || 'Audit failed');
+        }
 
         const folders = data.folders || [];
         driveAuditFoldersById = {};
