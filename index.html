@@ -251,8 +251,11 @@
             Drop <span style="color: var(--accent);">.STL</span>, <span style="color: var(--accent);">.3MF</span>, or <span style="color: var(--accent);">.GCODE</span> here, or click to browse
           </p>
           <p id="droppedFileStatus" style="color: var(--muted);" class="text-[11px] mt-1">
-            Automatically reads STL dimensions and G-code print time & filament weight
+            Automatically reads STL dimensions, 3MF thumbnails/settings, and G-code headers
           </p>
+          <div id="droppedThumbPreview" class="hidden mt-3 flex justify-center">
+            <img id="droppedThumbImg" alt="3MF Preview" class="h-28 rounded-lg object-contain" style="border: 1px solid var(--border); background: var(--surface);" />
+          </div>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -577,6 +580,8 @@
     let pendingParsedFile = null;
     let pendingFileRef = null;
     let pendingCustomGeometry = null;
+    let pendingThumbnailDataUrl = '';
+    let pendingThumbnailBase64 = '';
 
     function handleConfigHash() {
       const hash = window.location.hash || '';
@@ -1002,6 +1007,12 @@
                 </div>
               </div>
 
+              ${
+                m.thumbnailDataUrl
+                  ? `<img src="${m.thumbnailDataUrl}" alt="${m.title}" class="w-full h-32 object-contain rounded-md mb-1" style="background: var(--bg); border: 1px solid var(--border);" />`
+                  : ''
+              }
+
               <h3 class="text-sm font-semibold leading-snug">${m.title}</h3>
 
               <div class="text-xs font-mono" style="color: var(--muted);">
@@ -1297,6 +1308,23 @@
       if (file) processIngestedFile(file);
     }
 
+    function resizeDataUrl(dataUrl, maxWidth = 320) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const scale = Math.min(1, maxWidth / (img.width || maxWidth));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
+      });
+    }
+
     async function processIngestedFile(file) {
       const ext = file.name.split('.').pop().toLowerCase();
       if (!document.getElementById('formTitle').value) {
@@ -1304,6 +1332,11 @@
       }
       pendingFileRef = file;
       pendingParsedFile = { fileName: file.name, extension: ext, sizeBytes: file.size };
+      pendingThumbnailDataUrl = '';
+      pendingThumbnailBase64 = '';
+      const thumbWrap = document.getElementById('droppedThumbPreview');
+      const thumbImg = document.getElementById('droppedThumbImg');
+      if (thumbWrap) thumbWrap.classList.add('hidden');
       const statusEl = document.getElementById('droppedFileStatus');
 
       if (ext === 'stl') {
@@ -1319,9 +1352,74 @@
         const text = await file.text();
         const tMatch = text.match(/estimated printing time.*=\s*(.+)/i);
         const wMatch = text.match(/filament used \[g\]\s*=\s*([\d.]+)/i);
+        const mMatch = text.match(/filament_type\s*=\s*([A-Za-z0-9+\-_]+)/i);
         if (tMatch) document.getElementById('formPrintTime').value = tMatch[1].trim();
         if (wMatch) document.getElementById('formWeight').value = parseFloat(wMatch[1]);
+        if (mMatch) document.getElementById('formMaterial').value = mMatch[1];
         statusEl.textContent = `Parsed G-code headers: ${file.name}`;
+      } else if (ext === '3mf' && window.JSZip) {
+        try {
+          const zip = await JSZip.loadAsync(file);
+          const entries = Object.keys(zip.files);
+          const extracted = [];
+
+          // 1. Find embedded plate/model PNG thumbnail
+          const thumbPath =
+            entries.find((e) => /metadata\/plate_1\.png$/i.test(e)) ||
+            entries.find((e) => /thumbnails?\/.*\.png$/i.test(e)) ||
+            entries.find((e) => /metadata\/.*\.png$/i.test(e));
+
+          if (thumbPath) {
+            const rawB64 = await zip.files[thumbPath].async('base64');
+            const compactDataUrl = await resizeDataUrl('data:image/png;base64,' + rawB64, 320);
+            pendingThumbnailDataUrl = compactDataUrl;
+            pendingThumbnailBase64 = compactDataUrl.split(',')[1] || rawB64;
+            if (thumbImg && thumbWrap) {
+              thumbImg.src = compactDataUrl;
+              thumbWrap.classList.remove('hidden');
+            }
+            extracted.push('thumbnail');
+          }
+
+          // 2. Parse Bambu/Orca slice_info.config XML for print time, weight, filament
+          const sliceInfoPath = entries.find((e) => /slice_info\.config$/i.test(e));
+          if (sliceInfoPath) {
+            const xml = await zip.files[sliceInfoPath].async('string');
+            const predMatch = xml.match(/key=["']prediction["']\s+value=["'](\d+)["']/i);
+            const weightMatch = xml.match(/key=["']weight["']\s+value=["']([\d.]+)["']/i);
+            const filMatch = xml.match(/<filament[^>]+type=["']([^"']+)["']/i);
+            if (predMatch) {
+              const mins = Math.round(parseInt(predMatch[1], 10) / 60);
+              document.getElementById('formPrintTime').value = `${Math.floor(mins / 60)}h ${mins % 60}m`;
+              extracted.push('time');
+            }
+            if (weightMatch) {
+              document.getElementById('formWeight').value = parseFloat(weightMatch[1]);
+              extracted.push('weight');
+            }
+            if (filMatch) {
+              document.getElementById('formMaterial').value = filMatch[1];
+              extracted.push(filMatch[1]);
+            }
+          }
+
+          // 3. Fallback: project_settings.config / Slic3r_PE.config
+          const cfgPath = entries.find((e) => /project_settings\.config$|slic3r_pe\.config$/i.test(e));
+          if (cfgPath) {
+            const cfgText = await zip.files[cfgPath].async('string');
+            const filType = cfgText.match(/"filament_type"\s*:\s*\[\s*"([^"]+)"/i) || cfgText.match(/filament_type\s*=\s*([A-Za-z0-9+\-_]+)/i);
+            if (filType && !document.getElementById('formMaterial').value) {
+              document.getElementById('formMaterial').value = filType[1];
+              extracted.push(filType[1]);
+            }
+          }
+
+          statusEl.textContent = extracted.length
+            ? `Extracted from 3MF (${extracted.join(', ')}): ${file.name}`
+            : `Attached 3MF archive (${entries.length} entries): ${file.name}`;
+        } catch (err) {
+          statusEl.textContent = `Attached 3MF: ${file.name}`;
+        }
       } else {
         statusEl.textContent = `Attached: ${file.name}`;
       }
@@ -1364,6 +1462,7 @@
         sourceType: st,
         shapePreset: isP ? 'flange' : 'gridfinity',
         customGeometry: pendingCustomGeometry || null,
+        thumbnailDataUrl: pendingThumbnailDataUrl || '',
         createdAt: new Date().toISOString(),
         source: {
           isPersonalDesign: isP,
@@ -1389,7 +1488,7 @@
         printLogs: []
       };
 
-      // Upload actual file binary to Google Drive if Apps Script URL is configured
+      // Upload actual file binary (and extracted thumbnail) to Google Drive if Apps Script URL is configured
       if (pendingFileRef && cloudConfig.gasUrl) {
         if (btn) { btn.disabled = true; btn.textContent = 'Uploading to Drive...'; }
         try {
@@ -1405,6 +1504,7 @@
               fileName: pendingFileRef.name,
               mimeType: pendingFileRef.type || 'application/octet-stream',
               base64,
+              thumbnailBase64: pendingThumbnailBase64 || '',
               model: serializeModel(newModel)
             })
           });
@@ -1413,7 +1513,8 @@
             newModel.files[0].driveFileId = data.driveFileId;
             newModel.storage = {
               driveFolderId: data.driveFolderId,
-              driveFolderUrl: data.driveFolderUrl
+              driveFolderUrl: data.driveFolderUrl,
+              thumbnailDriveId: data.thumbnailDriveId || null
             };
           }
         } catch (err) {
@@ -1427,6 +1528,10 @@
       pendingParsedFile = null;
       pendingFileRef = null;
       pendingCustomGeometry = null;
+      pendingThumbnailDataUrl = '';
+      pendingThumbnailBase64 = '';
+      const thumbWrap = document.getElementById('droppedThumbPreview');
+      if (thumbWrap) thumbWrap.classList.add('hidden');
       saveModels();
       await syncModelToFirebase(newModel);
       switchTab(status === 'queued' ? 'queue' : 'library');
