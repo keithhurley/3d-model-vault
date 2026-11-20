@@ -1327,8 +1327,9 @@
 
     async function processIngestedFile(file) {
       const ext = file.name.split('.').pop().toLowerCase();
-      if (!document.getElementById('formTitle').value) {
-        document.getElementById('formTitle').value = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ');
+      const titleEl = document.getElementById('formTitle');
+      if (titleEl && !titleEl.value.trim()) {
+        titleEl.value = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ');
       }
       pendingFileRef = file;
       pendingParsedFile = { fileName: file.name, extension: ext, sizeBytes: file.size };
@@ -1338,6 +1339,7 @@
       const thumbImg = document.getElementById('droppedThumbImg');
       if (thumbWrap) thumbWrap.classList.add('hidden');
       const statusEl = document.getElementById('droppedFileStatus');
+      let autoFilledAnySpec = false;
 
       if (ext === 'stl') {
         const geom = parseStlBufferToGeometry(await file.arrayBuffer());
@@ -1347,17 +1349,18 @@
         const dims = `${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ${size.z.toFixed(1)}`;
         pendingCustomGeometry = geom;
         document.getElementById('formDims').value = dims;
+        autoFilledAnySpec = true;
         statusEl.textContent = `Loaded STL: ${file.name} (${dims} mm)`;
       } else if (ext === 'gcode' || ext === 'gco') {
         const text = await file.text();
         const tMatch = text.match(/estimated printing time.*=\s*(.+)/i);
         const wMatch = text.match(/filament used \[g\]\s*=\s*([\d.]+)/i);
         const mMatch = text.match(/filament_type\s*=\s*([A-Za-z0-9+\-_]+)/i);
-        if (tMatch) document.getElementById('formPrintTime').value = tMatch[1].trim();
-        if (wMatch) document.getElementById('formWeight').value = parseFloat(wMatch[1]);
-        if (mMatch) document.getElementById('formMaterial').value = mMatch[1];
+        if (tMatch) { document.getElementById('formPrintTime').value = tMatch[1].trim(); autoFilledAnySpec = true; }
+        if (wMatch) { document.getElementById('formWeight').value = parseFloat(wMatch[1]); autoFilledAnySpec = true; }
+        if (mMatch) { document.getElementById('formMaterial').value = mMatch[1]; autoFilledAnySpec = true; }
         statusEl.textContent = `Parsed G-code headers: ${file.name}`;
-      } else if (ext === '3mf' && window.JSZip) {
+      } else if ((ext === '3mf' || ext === 'zip') && window.JSZip) {
         try {
           const zip = await JSZip.loadAsync(file);
           const entries = Object.keys(zip.files);
@@ -1367,7 +1370,7 @@
           const thumbPath =
             entries.find((e) => /metadata\/plate_1\.png$/i.test(e)) ||
             entries.find((e) => /thumbnails?\/.*\.png$/i.test(e)) ||
-            entries.find((e) => /metadata\/.*\.png$/i.test(e));
+            entries.find((e) => /\.(png|jpg|jpeg)$/i.test(e) && !e.startsWith('__MACOSX'));
 
           if (thumbPath) {
             const rawB64 = await zip.files[thumbPath].async('base64');
@@ -1381,7 +1384,7 @@
             extracted.push('thumbnail');
           }
 
-          // 2. Parse Bambu/Orca slice_info.config XML for print time, weight, filament
+          // 2. Parse Bambu/Orca slice_info.config XML or plate_1.json
           const sliceInfoPath = entries.find((e) => /slice_info\.config$/i.test(e));
           if (sliceInfoPath) {
             const xml = await zip.files[sliceInfoPath].async('string');
@@ -1391,37 +1394,63 @@
             if (predMatch) {
               const mins = Math.round(parseInt(predMatch[1], 10) / 60);
               document.getElementById('formPrintTime').value = `${Math.floor(mins / 60)}h ${mins % 60}m`;
+              autoFilledAnySpec = true;
               extracted.push('time');
             }
             if (weightMatch) {
               document.getElementById('formWeight').value = parseFloat(weightMatch[1]);
+              autoFilledAnySpec = true;
               extracted.push('weight');
             }
             if (filMatch) {
               document.getElementById('formMaterial').value = filMatch[1];
+              autoFilledAnySpec = true;
               extracted.push(filMatch[1]);
             }
           }
 
-          // 3. Fallback: project_settings.config / Slic3r_PE.config
-          const cfgPath = entries.find((e) => /project_settings\.config$|slic3r_pe\.config$/i.test(e));
+          // 3. Fallback: project_settings.config / Slic3r_PE.config / plate_1.json
+          const cfgPath = entries.find((e) => /project_settings\.config$|slic3r_pe\.config$|plate_1\.json$/i.test(e));
           if (cfgPath) {
             const cfgText = await zip.files[cfgPath].async('string');
             const filType = cfgText.match(/"filament_type"\s*:\s*\[\s*"([^"]+)"/i) || cfgText.match(/filament_type\s*=\s*([A-Za-z0-9+\-_]+)/i);
             if (filType && !document.getElementById('formMaterial').value) {
               document.getElementById('formMaterial').value = filType[1];
+              autoFilledAnySpec = true;
               extracted.push(filType[1]);
             }
           }
 
+          // 4. If it's a .zip from Thingiverse/Printables, measure the first .stl inside it!
+          if (ext === 'zip') {
+            const innerStl = entries.find((e) => /\.stl$/i.test(e) && !e.startsWith('__MACOSX'));
+            if (innerStl) {
+              const stlBuf = await zip.files[innerStl].async('arraybuffer');
+              const geom = parseStlBufferToGeometry(stlBuf);
+              geom.computeBoundingBox();
+              const size = new THREE.Vector3();
+              geom.boundingBox.getSize(size);
+              const dims = `${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ${size.z.toFixed(1)}`;
+              pendingCustomGeometry = geom;
+              document.getElementById('formDims').value = dims;
+              autoFilledAnySpec = true;
+              extracted.push(dims + ' mm');
+            }
+          }
+
           statusEl.textContent = extracted.length
-            ? `Extracted from 3MF (${extracted.join(', ')}): ${file.name}`
-            : `Attached 3MF archive (${entries.length} entries): ${file.name}`;
+            ? `Extracted from ${ext.toUpperCase()} (${extracted.join(', ')}): ${file.name}`
+            : `Attached ${ext.toUpperCase()} archive (${entries.length} files): ${file.name}`;
         } catch (err) {
-          statusEl.textContent = `Attached 3MF: ${file.name}`;
+          statusEl.textContent = `Attached ${ext.toUpperCase()}: ${file.name}`;
         }
       } else {
         statusEl.textContent = `Attached: ${file.name}`;
+      }
+
+      if (autoFilledAnySpec) {
+        const optEl = document.getElementById('optionalSpecs');
+        if (optEl) optEl.classList.remove('hidden');
       }
     }
 
