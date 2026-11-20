@@ -1391,6 +1391,9 @@
       const statusEl = document.getElementById('droppedFileStatus');
       let autoFilledAnySpec = false;
 
+      const fromName = detectSourceFromText(file.name);
+      if (fromName.sourceType) applyDetectedSource(fromName.sourceType, fromName.url);
+
       if (ext === 'stl') {
         const geom = parseStlBufferToGeometry(await file.arrayBuffer());
         geom.computeBoundingBox();
@@ -1415,6 +1418,30 @@
           const zip = await JSZip.loadAsync(file);
           const entries = Object.keys(zip.files);
           const extracted = [];
+
+          // 0. Auto-detect source from archive metadata/readme/attribution or Thingiverse folder layout
+          const metaCandidates = entries.filter(
+            (e) =>
+              !e.startsWith('__MACOSX') &&
+              /(readme|license|attribution|model_settings\.config|plate_1\.json|slice_info\.config|\.url|\.html?)$/i.test(e) &&
+              (zip.files[e]._data?.uncompressedSize || 0) < 512 * 1024
+          );
+          for (const metaPath of metaCandidates.slice(0, 5)) {
+            const metaText = await zip.files[metaPath].async('string');
+            const detected = detectSourceFromText(metaText);
+            if (detected.sourceType) {
+              applyDetectedSource(detected.sourceType, detected.url);
+              break;
+            }
+          }
+          if (
+            ext === 'zip' &&
+            document.getElementById('formSourceType')?.value === 'personal' &&
+            entries.some((e) => /^files\//i.test(e)) &&
+            entries.some((e) => /^images\//i.test(e))
+          ) {
+            applyDetectedSource('thingiverse');
+          }
 
           // 1. Find embedded plate/model PNG thumbnail
           const thumbPath =
@@ -1511,12 +1538,41 @@
       document.getElementById('externalSourceGroup').classList.toggle('hidden', isP);
     }
 
+    function applyDetectedSource(sourceType, detectedUrl = '') {
+      if (!sourceType) return;
+      const sel = document.getElementById('formSourceType');
+      if (sel && sel.value === 'personal') {
+        sel.value = sourceType;
+        toggleSourceFields();
+      }
+      if (detectedUrl) {
+        const urlEl = document.getElementById('formUrl');
+        if (urlEl && !urlEl.value.trim()) {
+          urlEl.value = detectedUrl;
+        }
+      }
+    }
+
+    function detectSourceFromText(text) {
+      if (!text) return { sourceType: '', url: '' };
+      const lower = text.toLowerCase();
+      const urlMatch = text.match(/https?:\/\/[^\s"'<>]+/i);
+      const url = urlMatch ? urlMatch[0] : '';
+      if (lower.includes('makerworld.com') || lower.includes('makerworld')) return { sourceType: 'makerworld', url };
+      if (lower.includes('printables.com') || lower.includes('printables')) return { sourceType: 'printables', url };
+      if (lower.includes('thingiverse.com') || lower.includes('thingiverse') || /^thing[_-]\d+/i.test(lower)) return { sourceType: 'thingiverse', url };
+      if (lower.includes('cults3d.com') || lower.includes('thangs.com')) return { sourceType: 'other', url };
+      return { sourceType: '', url: '' };
+    }
+
     function autoDetectSourceFromUrl() {
       const url = document.getElementById('formUrl').value.toLowerCase();
       const sel = document.getElementById('formSourceType');
       if (url.includes('makerworld.com')) sel.value = 'makerworld';
       else if (url.includes('printables.com')) sel.value = 'printables';
       else if (url.includes('thingiverse.com')) sel.value = 'thingiverse';
+      else if (url.includes('cults3d.com') || url.includes('thangs.com')) sel.value = 'other';
+      toggleSourceFields();
     }
 
     function fileToBase64(blob) {
