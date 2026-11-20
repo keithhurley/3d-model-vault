@@ -588,9 +588,21 @@
 
     function handleConfigHash() {
       const hash = window.location.hash || '';
-      if (!hash.startsWith('#cfg=')) return;
+      const searchParams = new URLSearchParams(window.location.search || '');
+      let rawCfg = '';
+      if (hash.startsWith('#cfg=')) {
+        rawCfg = hash.slice(5);
+      } else if (searchParams.get('cfg')) {
+        rawCfg = searchParams.get('cfg');
+      }
+      if (!rawCfg) return;
       try {
-        const b64 = hash.slice(5);
+        let b64 = rawCfg.trim();
+        if (b64.includes('%')) {
+          try { b64 = decodeURIComponent(b64); } catch (e) {}
+        }
+        b64 = b64.replace(/-/g, '+').replace(/_/g, '/');
+        while (b64.length % 4) b64 += '=';
         const json = decodeURIComponent(escape(atob(b64)));
         const parsed = JSON.parse(json);
         if (parsed && typeof parsed === 'object') {
@@ -599,11 +611,33 @@
             gasUrl: parsed.gasUrl || '',
             apiSecret: parsed.apiSecret || ''
           };
-          localStorage.setItem(CONFIG_KEY, JSON.stringify(cloudConfig));
-          history.replaceState(null, '', window.location.pathname + window.location.search);
+          let savedToStorage = false;
+          try {
+            localStorage.setItem(CONFIG_KEY, JSON.stringify(cloudConfig));
+            savedToStorage = true;
+          } catch (e) {
+            console.warn('Could not persist config to localStorage:', e);
+          }
+          if (savedToStorage) {
+            try {
+              history.replaceState(null, '', window.location.pathname + window.location.search);
+            } catch (e) {}
+          }
+          const msgEl = document.getElementById('cloudStatusMsg');
+          if (msgEl) {
+            msgEl.textContent = savedToStorage
+              ? 'Device settings loaded from setup link.'
+              : 'Device settings loaded for this session (storage restricted on this browser/file).';
+            msgEl.classList.remove('hidden');
+          }
         }
       } catch (e) {
         console.warn('Invalid #cfg hash:', e);
+        const msgEl = document.getElementById('cloudStatusMsg');
+        if (msgEl) {
+          msgEl.textContent = 'Could not read setup link settings (invalid #cfg data).';
+          msgEl.classList.remove('hidden');
+        }
       }
     }
 
@@ -619,12 +653,25 @@
       }
       const payload = JSON.stringify({ firebaseUrl: fb, gasUrl: gas, apiSecret: sec });
       const b64 = btoa(unescape(encodeURIComponent(payload)));
-      const url = `${window.location.origin}${window.location.pathname}#cfg=${b64}`;
+      const isLocalFile = window.location.protocol === 'file:' || window.location.protocol === 'content:' || window.location.origin === 'null';
+      const baseUrl = isLocalFile
+        ? window.location.href.split('#')[0].split('?')[0]
+        : `${window.location.origin}${window.location.pathname}`;
+      const url = `${baseUrl}#cfg=${b64}`;
+      let copied = false;
       try {
-        await navigator.clipboard.writeText(url);
-        msgEl.textContent = 'Copied! Bookmark this URL privately to auto-configure any device in 1 click.';
-      } catch (e) {
-        msgEl.textContent = 'Setup URL: ' + url;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(url);
+          copied = true;
+        }
+      } catch (e) {}
+      if (isLocalFile) {
+        msgEl.textContent = (copied ? 'Copied local file link — ' : '') +
+          'Note: You are viewing a local file (file://), so this link will not open on a phone. Open your hosted app URL (e.g. GitHub Pages) to generate a cross-device link, or append #cfg=' + b64 + ' to your hosted URL.';
+      } else if (copied) {
+        msgEl.textContent = 'Copied! Open this exact URL on your phone and bookmark it to auto-configure in 1 click.';
+      } else {
+        msgEl.textContent = 'Copy this Setup URL: ' + url;
       }
       msgEl.classList.remove('hidden');
     }
