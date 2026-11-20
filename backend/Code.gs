@@ -79,6 +79,14 @@ function doPost(e) {
       return jsonResponse_(handleUploadFile_(payload));
     }
 
+    if (action === 'initResumableUpload') {
+      return jsonResponse_(handleInitResumableUpload_(payload));
+    }
+
+    if (action === 'uploadChunk') {
+      return jsonResponse_(handleUploadChunk_(payload));
+    }
+
     if (action === 'ingestUrl') {
       return jsonResponse_(handleIngestUrl_(payload));
     }
@@ -153,6 +161,120 @@ function handleUploadFile_(payload) {
     driveFileName: driveFile.name,
     thumbnailDriveId: thumbnailDriveId
   };
+}
+
+/**
+ * Step 1 of large-file upload: creates the Drive folder, uploads any thumbnail,
+ * and initiates a Google Drive v3 resumable upload session.
+ * When `payload.origin` is an http(s) origin, Drive binds CORS headers to the
+ * returned `uploadUrl` so the browser can stream large ZIP/STL files directly.
+ */
+function handleInitResumableUpload_(payload) {
+  const modelId = payload.modelId || ('m_' + Utilities.getUuid().slice(0, 8));
+  const title = payload.title || 'Untitled 3D Model';
+  const fileName = payload.fileName || 'model.stl';
+  const mimeType = payload.mimeType || 'application/octet-stream';
+  const fileSize = Number(payload.fileSize || 0);
+
+  const folder = getOrCreateModelFolder_(modelId, title, payload.driveFolderId);
+
+  let thumbnailDriveId = null;
+  if (payload.thumbnailBase64) {
+    const thumbBytes = Utilities.base64Decode(payload.thumbnailBase64);
+    const thumbBlob = Utilities.newBlob(thumbBytes, 'image/png', 'thumbnail.png');
+    const thumbFile = uploadToDriveResumable_(thumbBlob, folder.getId(), 'thumbnail.png', 'image/png');
+    thumbnailDriveId = thumbFile.id;
+  }
+
+  const token = ScriptApp.getOAuthToken();
+  const headers = {
+    Authorization: 'Bearer ' + token,
+    'X-Upload-Content-Type': mimeType
+  };
+  if (fileSize > 0) {
+    headers['X-Upload-Content-Length'] = String(fileSize);
+  }
+  if (payload.origin && /^https?:\/\//i.test(payload.origin)) {
+    headers.Origin = payload.origin;
+  }
+
+  const initRes = withBackoff_(() =>
+    UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable', {
+      method: 'post',
+      contentType: 'application/json; charset=UTF-8',
+      headers: headers,
+      payload: JSON.stringify({
+        name: fileName,
+        parents: [folder.getId()]
+      }),
+      muteHttpExceptions: true
+    })
+  );
+
+  if (initRes.getResponseCode() >= 400) {
+    return { ok: false, error: 'Drive resumable init failed: ' + initRes.getContentText() };
+  }
+
+  const resHeaders = initRes.getHeaders();
+  const uploadUrl = resHeaders['Location'] || resHeaders['location'];
+  if (!uploadUrl) {
+    return { ok: false, error: 'Drive did not return a resumable upload Location header' };
+  }
+
+  return {
+    ok: true,
+    modelId: modelId,
+    driveFolderId: folder.getId(),
+    driveFolderUrl: folder.getUrl(),
+    thumbnailDriveId: thumbnailDriveId,
+    uploadUrl: uploadUrl
+  };
+}
+
+/**
+ * Fallback chunk proxy for file:// origins or when direct browser PUT is blocked.
+ * Forwards a single base64-encoded chunk (must be a multiple of 256 KiB except final)
+ * to the Google Drive resumable upload session URI.
+ */
+function handleUploadChunk_(payload) {
+  const uploadUrl = payload.uploadUrl;
+  const chunkBase64 = payload.chunkBase64;
+  const startByte = Number(payload.startByte);
+  const endByte = Number(payload.endByte);
+  const totalBytes = Number(payload.totalBytes);
+  const mimeType = payload.mimeType || 'application/octet-stream';
+
+  if (!uploadUrl || !chunkBase64 || isNaN(startByte) || isNaN(endByte) || !totalBytes) {
+    return { ok: false, error: 'Missing required chunk upload parameters' };
+  }
+
+  const bytes = Utilities.base64Decode(chunkBase64);
+  const putRes = withBackoff_(() =>
+    UrlFetchApp.fetch(uploadUrl, {
+      method: 'put',
+      contentType: mimeType,
+      headers: {
+        'Content-Range': 'bytes ' + startByte + '-' + endByte + '/' + totalBytes
+      },
+      payload: bytes,
+      muteHttpExceptions: true
+    })
+  );
+
+  const code = putRes.getResponseCode();
+  if (code === 308) {
+    return { ok: true, done: false, nextOffset: endByte + 1 };
+  }
+  if (code >= 200 && code < 300) {
+    const driveFile = JSON.parse(putRes.getContentText());
+    return {
+      ok: true,
+      done: true,
+      driveFileId: driveFile.id,
+      driveFileName: driveFile.name
+    };
+  }
+  return { ok: false, error: 'Drive chunk upload failed (' + code + '): ' + putRes.getContentText() };
 }
 
 /**
