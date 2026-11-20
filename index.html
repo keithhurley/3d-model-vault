@@ -289,19 +289,18 @@
               <input id="formAuthor" type="text" placeholder="Designer name" class="vault-input w-full px-3 py-1.5 text-xs" />
             </div>
           </div>
-
-          <div class="sm:col-span-2">
-            <label class="block text-xs font-medium mb-1" style="color: var(--muted);">Note for Next Time</label>
-            <input id="formNextTime" type="text" placeholder="Slicer settings, scaling, or material reminders..." class="vault-input w-full px-3 py-2 text-xs" />
-          </div>
         </div>
 
-        <!-- Collapsible Optional Specs -->
+        <!-- Collapsible Optional Details -->
         <div>
           <button type="button" onclick="document.getElementById('optionalSpecs').classList.toggle('hidden')" class="text-xs font-medium" style="color: var(--muted);">
-            ▸ More Specs & Queue Options
+            ▸ More
           </button>
           <div id="optionalSpecs" class="hidden grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-3 pt-3" style="border-top: 1px solid var(--border);">
+            <div class="col-span-2 sm:col-span-4">
+              <label class="block text-[11px] mb-1" style="color: var(--muted);">Note for Next Time</label>
+              <input id="formNextTime" type="text" placeholder="Slicer settings, scaling, or material reminders..." class="vault-input w-full px-2.5 py-1.5 text-xs" />
+            </div>
             <div>
               <label class="block text-[11px] mb-1" style="color: var(--muted);">Size (mm)</label>
               <input id="formDims" type="text" placeholder="84 × 126 × 42" class="vault-input w-full px-2.5 py-1.5 text-xs font-mono" />
@@ -321,8 +320,8 @@
             <div class="col-span-2">
               <label class="block text-[11px] mb-1" style="color: var(--muted);">Add to</label>
               <select id="formStatus" class="vault-input w-full px-2.5 py-1.5 text-xs">
+                <option value="archived" selected>Library Archive</option>
                 <option value="queued">Print Queue</option>
-                <option value="archived">Library Archive</option>
                 <option value="printed">Already Printed</option>
               </select>
             </div>
