@@ -149,14 +149,6 @@
       border-radius: 8px;
       overflow: hidden;
     }
-
-    @keyframes pulseDot {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.4; transform: scale(0.8); }
-    }
-    .pulse-dot {
-      animation: pulseDot 1.6s ease-in-out infinite;
-    }
   </style>
 </head>
 <body class="min-h-screen flex flex-col">
@@ -240,7 +232,6 @@
           <option value="all">All Statuses</option>
           <option value="favorites">★ Favorites</option>
           <option value="queued">In Queue</option>
-          <option value="printing">Printing</option>
           <option value="printed">Printed</option>
           <option value="archived">Archived</option>
           <option value="needs_attention">⚠ Needs QA/QC</option>
@@ -1576,10 +1567,7 @@
 
     function renderStatusPill(status) {
       const st = (status || 'archived').toLowerCase();
-      if (st === 'printing') {
-        return `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider" style="background-color: var(--accent-soft); color: var(--accent);"><span class="w-1.5 h-1.5 rounded-full pulse-dot" style="background-color: var(--accent);"></span>Printing</span>`;
-      }
-      if (st === 'queued') {
+      if (st === 'queued' || st === 'printing') {
         return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider" style="background-color: var(--accent-soft); color: var(--accent);">Queued</span>`;
       }
       if (st === 'printed') {
@@ -2109,9 +2097,6 @@
           <div class="flex items-center gap-2 shrink-0">
             <button onclick="toggleQueueStatus('${m.id}')" class="${isQueued ? 'vault-btn-primary' : 'vault-btn-ghost'} px-3 py-1.5 text-xs">
               ${isQueued ? 'In Queue' : '+ Queue'}
-            </button>
-            <button onclick="setWorkflowStatus('${m.id}', 'printing')" class="vault-btn-ghost px-3 py-1.5 text-xs">
-              Start Print
             </button>
             <button onclick="setWorkflowStatus('${m.id}', 'printed')" class="vault-btn-primary px-3 py-1.5 text-xs">
               Mark Printed
